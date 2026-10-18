@@ -12,3 +12,6 @@ dist/
 
 # Filled requirements test workbook (names internal USA incidents; kept off GitHub)
 docs/test-results/
+
+# Firebase CLI cache
+.firebase/

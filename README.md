@@ -252,8 +252,24 @@ Then open the address Vite prints (usually http://localhost:5173).
 | `npm test` | Run all tests |
 | `npm run typecheck` | Check TypeScript types |
 | `npm run build` | Build static files into `dist/` |
+| `npm run preview` | Serve the built app locally with the same security headers as Firebase Hosting |
+| `npm run deploy` | Run the tests, build, and publish to Firebase Hosting |
 
 ---
+
+## Deploying (Firebase Hosting)
+
+The app is a static site: Firebase only serves its files. Grades stay in each teacher's browser, and the security headers in [firebase.json](firebase.json) block the page from connecting to any other site.
+
+One-time setup:
+
+1. Create a Firebase project (free Spark plan, Google Analytics off) at [console.firebase.google.com](https://console.firebase.google.com).
+2. Sign in from this folder: `npx firebase-tools@15 login`
+3. Link the project: `npx firebase-tools@15 use --add` (choose the project, alias `default`). This writes `.firebaserc`.
+
+Each release: `npm run deploy`. The app is then at `https://<project-id>.web.app`.
+
+Saved classes belong to the address they were made on: classes made on `localhost` do not appear on the hosted site. Move them with **Backup** and **Restore**.
 
 ## Accuracy and testing
 
