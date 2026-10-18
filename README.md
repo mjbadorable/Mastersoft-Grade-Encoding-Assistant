@@ -2,6 +2,8 @@
 
 A browser-based companion calculator for faculty of the University of San Agustin. It shows teachers **exactly what to enter in Mastersoft** and **exactly what grade Mastersoft will produce**, before they encode anything.
 
+**Live app:** [mastersoft-grade-assistant.web.app](https://mastersoft-grade-assistant.web.app)
+
 > [!NOTE]
 > This is a personal project, **not an official system of the University of San Agustin**. It does not connect to Mastersoft. Everything runs in the teacher's browser, and student data never leaves the computer.
 
@@ -267,7 +269,7 @@ One-time setup:
 2. Sign in from this folder: `npx firebase-tools@15 login`
 3. Link the project: `npx firebase-tools@15 use --add` (choose the project, alias `default`). This writes `.firebaserc`.
 
-Each release: `npm run deploy`. The app is then at `https://<project-id>.web.app`.
+Each release: `npm run deploy` (in Windows PowerShell, use `npm.cmd run deploy` and `npx.cmd`, because PowerShell blocks the `npm`/`npx` scripts by default). The app is then at [mastersoft-grade-assistant.web.app](https://mastersoft-grade-assistant.web.app).
 
 Saved classes belong to the address they were made on: classes made on `localhost` do not appear on the hosted site. Move them with **Backup** and **Restore**.
 
