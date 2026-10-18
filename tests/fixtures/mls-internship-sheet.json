@@ -1,0 +1,937 @@
+{
+  "source": "MLS Internship Google Sheet (LAB and LEC tabs), downloaded 2026-10-18. Student names removed; IDs follow sheet row order (rows 6-31 -> S01-S26).",
+  "notes": [
+    "Only the 'mastersoftReference' case comes from a real Mastersoft calculation.",
+    "Student cases are the sheet's own reverse-mode output (target FR -> mark /100, same mark for all 3 terms). Use them as reverse-mode and forward round-trip tests, not as Mastersoft-verified data.",
+    "The sheet's Prelim Grade column is excluded: its formula uses absolute refs (SUM($E$6,$H$6)), so every row repeats row 6's value.",
+    "LAB S01: the sheet's FR input (93) differs from its 'Original Grade' (86); kept as the sheet has it."
+  ],
+  "subjects": {
+    "LAB": {
+      "subjectType": "LAB",
+      "weights": {
+        "cs": 0.7,
+        "we": 0.3
+      },
+      "mastersoftReference": {
+        "csMark": 88,
+        "csTotal": 100,
+        "weMark": 88,
+        "weTotal": 100,
+        "csTransmuted": 93,
+        "weTransmuted": 93,
+        "csWeighted": 65.1,
+        "weWeighted": 27.9,
+        "termGrade": 93,
+        "termPointGrade": 1.6
+      },
+      "students": [
+        {
+          "id": "S01",
+          "targetFR": 93,
+          "originalGrade": 86,
+          "markPerTerm": {
+            "cs": 89,
+            "we": 89,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 93,
+            "termGrade": 93,
+            "termPointGrade": 1.6,
+            "finalRating": 93,
+            "frPointGrade": 1.6
+          }
+        },
+        {
+          "id": "S02",
+          "targetFR": 85,
+          "originalGrade": 85,
+          "markPerTerm": {
+            "cs": 76,
+            "we": 76,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 85,
+            "termGrade": 85,
+            "termPointGrade": 2.2,
+            "finalRating": 85,
+            "frPointGrade": 2.2
+          }
+        },
+        {
+          "id": "S03",
+          "targetFR": 89,
+          "originalGrade": 89,
+          "markPerTerm": {
+            "cs": 83,
+            "we": 83,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 89,
+            "termGrade": 89,
+            "termPointGrade": 1.9,
+            "finalRating": 89,
+            "frPointGrade": 1.9
+          }
+        },
+        {
+          "id": "S04",
+          "targetFR": 90,
+          "originalGrade": 90,
+          "markPerTerm": {
+            "cs": 84,
+            "we": 84,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 90,
+            "termGrade": 90,
+            "termPointGrade": 1.8,
+            "finalRating": 90,
+            "frPointGrade": 1.8
+          }
+        },
+        {
+          "id": "S05",
+          "targetFR": 89,
+          "originalGrade": 89,
+          "markPerTerm": {
+            "cs": 83,
+            "we": 83,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 89,
+            "termGrade": 89,
+            "termPointGrade": 1.9,
+            "finalRating": 89,
+            "frPointGrade": 1.9
+          }
+        },
+        {
+          "id": "S06",
+          "targetFR": 89,
+          "originalGrade": 89,
+          "markPerTerm": {
+            "cs": 83,
+            "we": 83,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 89,
+            "termGrade": 89,
+            "termPointGrade": 1.9,
+            "finalRating": 89,
+            "frPointGrade": 1.9
+          }
+        },
+        {
+          "id": "S07",
+          "targetFR": 88,
+          "originalGrade": 88,
+          "markPerTerm": {
+            "cs": 81,
+            "we": 81,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 88,
+            "termGrade": 88,
+            "termPointGrade": 2,
+            "finalRating": 88,
+            "frPointGrade": 2
+          }
+        },
+        {
+          "id": "S08",
+          "targetFR": 89,
+          "originalGrade": 89,
+          "markPerTerm": {
+            "cs": 83,
+            "we": 83,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 89,
+            "termGrade": 89,
+            "termPointGrade": 1.9,
+            "finalRating": 89,
+            "frPointGrade": 1.9
+          }
+        },
+        {
+          "id": "S09",
+          "targetFR": 88,
+          "originalGrade": 88,
+          "markPerTerm": {
+            "cs": 81,
+            "we": 81,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 88,
+            "termGrade": 88,
+            "termPointGrade": 2,
+            "finalRating": 88,
+            "frPointGrade": 2
+          }
+        },
+        {
+          "id": "S10",
+          "targetFR": 89,
+          "originalGrade": 89,
+          "markPerTerm": {
+            "cs": 83,
+            "we": 83,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 89,
+            "termGrade": 89,
+            "termPointGrade": 1.9,
+            "finalRating": 89,
+            "frPointGrade": 1.9
+          }
+        },
+        {
+          "id": "S11",
+          "targetFR": 89,
+          "originalGrade": 89,
+          "markPerTerm": {
+            "cs": 83,
+            "we": 83,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 89,
+            "termGrade": 89,
+            "termPointGrade": 1.9,
+            "finalRating": 89,
+            "frPointGrade": 1.9
+          }
+        },
+        {
+          "id": "S12",
+          "targetFR": 89,
+          "originalGrade": 89,
+          "markPerTerm": {
+            "cs": 83,
+            "we": 83,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 89,
+            "termGrade": 89,
+            "termPointGrade": 1.9,
+            "finalRating": 89,
+            "frPointGrade": 1.9
+          }
+        },
+        {
+          "id": "S13",
+          "targetFR": 83,
+          "originalGrade": 83,
+          "markPerTerm": {
+            "cs": 73,
+            "we": 73,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 83,
+            "termGrade": 83,
+            "termPointGrade": 2.4,
+            "finalRating": 83,
+            "frPointGrade": 2.4
+          }
+        },
+        {
+          "id": "S14",
+          "targetFR": 89,
+          "originalGrade": 89,
+          "markPerTerm": {
+            "cs": 83,
+            "we": 83,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 89,
+            "termGrade": 89,
+            "termPointGrade": 1.9,
+            "finalRating": 89,
+            "frPointGrade": 1.9
+          }
+        },
+        {
+          "id": "S15",
+          "targetFR": 86,
+          "originalGrade": 86,
+          "markPerTerm": {
+            "cs": 78,
+            "we": 78,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 86,
+            "termGrade": 86,
+            "termPointGrade": 2.1,
+            "finalRating": 86,
+            "frPointGrade": 2.1
+          }
+        },
+        {
+          "id": "S16",
+          "targetFR": 85,
+          "originalGrade": 85,
+          "markPerTerm": {
+            "cs": 76,
+            "we": 76,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 85,
+            "termGrade": 85,
+            "termPointGrade": 2.2,
+            "finalRating": 85,
+            "frPointGrade": 2.2
+          }
+        },
+        {
+          "id": "S17",
+          "targetFR": 90,
+          "originalGrade": 90,
+          "markPerTerm": {
+            "cs": 84,
+            "we": 84,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 90,
+            "termGrade": 90,
+            "termPointGrade": 1.8,
+            "finalRating": 90,
+            "frPointGrade": 1.8
+          }
+        },
+        {
+          "id": "S18",
+          "targetFR": 87,
+          "originalGrade": 87,
+          "markPerTerm": {
+            "cs": 79,
+            "we": 79,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 87,
+            "termGrade": 87,
+            "termPointGrade": 2.1,
+            "finalRating": 87,
+            "frPointGrade": 2.1
+          }
+        },
+        {
+          "id": "S19",
+          "targetFR": 89,
+          "originalGrade": 89,
+          "markPerTerm": {
+            "cs": 83,
+            "we": 83,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 89,
+            "termGrade": 89,
+            "termPointGrade": 1.9,
+            "finalRating": 89,
+            "frPointGrade": 1.9
+          }
+        },
+        {
+          "id": "S20",
+          "targetFR": 90,
+          "originalGrade": 90,
+          "markPerTerm": {
+            "cs": 84,
+            "we": 84,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 90,
+            "termGrade": 90,
+            "termPointGrade": 1.8,
+            "finalRating": 90,
+            "frPointGrade": 1.8
+          }
+        },
+        {
+          "id": "S21",
+          "targetFR": 89,
+          "originalGrade": 89,
+          "markPerTerm": {
+            "cs": 83,
+            "we": 83,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 89,
+            "termGrade": 89,
+            "termPointGrade": 1.9,
+            "finalRating": 89,
+            "frPointGrade": 1.9
+          }
+        },
+        {
+          "id": "S22",
+          "targetFR": 87,
+          "originalGrade": 87,
+          "markPerTerm": {
+            "cs": 79,
+            "we": 79,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 87,
+            "termGrade": 87,
+            "termPointGrade": 2.1,
+            "finalRating": 87,
+            "frPointGrade": 2.1
+          }
+        },
+        {
+          "id": "S23",
+          "targetFR": 89,
+          "originalGrade": 89,
+          "markPerTerm": {
+            "cs": 83,
+            "we": 83,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 89,
+            "termGrade": 89,
+            "termPointGrade": 1.9,
+            "finalRating": 89,
+            "frPointGrade": 1.9
+          }
+        },
+        {
+          "id": "S24",
+          "targetFR": 89,
+          "originalGrade": 89,
+          "markPerTerm": {
+            "cs": 83,
+            "we": 83,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 89,
+            "termGrade": 89,
+            "termPointGrade": 1.9,
+            "finalRating": 89,
+            "frPointGrade": 1.9
+          }
+        },
+        {
+          "id": "S25",
+          "targetFR": 88,
+          "originalGrade": 88,
+          "markPerTerm": {
+            "cs": 81,
+            "we": 81,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 88,
+            "termGrade": 88,
+            "termPointGrade": 2,
+            "finalRating": 88,
+            "frPointGrade": 2
+          }
+        },
+        {
+          "id": "S26",
+          "targetFR": 86,
+          "originalGrade": 86,
+          "markPerTerm": {
+            "cs": 78,
+            "we": 78,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 86,
+            "termGrade": 86,
+            "termPointGrade": 2.1,
+            "finalRating": 86,
+            "frPointGrade": 2.1
+          }
+        }
+      ]
+    },
+    "LEC": {
+      "subjectType": "LEC",
+      "weights": {
+        "cs": 0.5,
+        "we": 0.5
+      },
+      "mastersoftReference": {
+        "csMark": 88,
+        "csTotal": 100,
+        "weMark": 88,
+        "weTotal": 100,
+        "csTransmuted": 93,
+        "weTransmuted": 93,
+        "csWeighted": 46.5,
+        "weWeighted": 46.5,
+        "termGrade": 93,
+        "termPointGrade": 1.6
+      },
+      "students": [
+        {
+          "id": "S01",
+          "targetFR": 86,
+          "originalGrade": 86,
+          "markPerTerm": {
+            "cs": 78,
+            "we": 78,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 86,
+            "termGrade": 86,
+            "termPointGrade": 2.1,
+            "finalRating": 86,
+            "frPointGrade": 2.1
+          }
+        },
+        {
+          "id": "S02",
+          "targetFR": 85,
+          "originalGrade": 85,
+          "markPerTerm": {
+            "cs": 76,
+            "we": 76,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 85,
+            "termGrade": 85,
+            "termPointGrade": 2.2,
+            "finalRating": 85,
+            "frPointGrade": 2.2
+          }
+        },
+        {
+          "id": "S03",
+          "targetFR": 89,
+          "originalGrade": 89,
+          "markPerTerm": {
+            "cs": 83,
+            "we": 83,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 89,
+            "termGrade": 89,
+            "termPointGrade": 1.9,
+            "finalRating": 89,
+            "frPointGrade": 1.9
+          }
+        },
+        {
+          "id": "S04",
+          "targetFR": 90,
+          "originalGrade": 90,
+          "markPerTerm": {
+            "cs": 84,
+            "we": 84,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 90,
+            "termGrade": 90,
+            "termPointGrade": 1.8,
+            "finalRating": 90,
+            "frPointGrade": 1.8
+          }
+        },
+        {
+          "id": "S05",
+          "targetFR": 89,
+          "originalGrade": 89,
+          "markPerTerm": {
+            "cs": 83,
+            "we": 83,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 89,
+            "termGrade": 89,
+            "termPointGrade": 1.9,
+            "finalRating": 89,
+            "frPointGrade": 1.9
+          }
+        },
+        {
+          "id": "S06",
+          "targetFR": 89,
+          "originalGrade": 89,
+          "markPerTerm": {
+            "cs": 83,
+            "we": 83,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 89,
+            "termGrade": 89,
+            "termPointGrade": 1.9,
+            "finalRating": 89,
+            "frPointGrade": 1.9
+          }
+        },
+        {
+          "id": "S07",
+          "targetFR": 88,
+          "originalGrade": 88,
+          "markPerTerm": {
+            "cs": 81,
+            "we": 81,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 88,
+            "termGrade": 88,
+            "termPointGrade": 2,
+            "finalRating": 88,
+            "frPointGrade": 2
+          }
+        },
+        {
+          "id": "S08",
+          "targetFR": 89,
+          "originalGrade": 89,
+          "markPerTerm": {
+            "cs": 83,
+            "we": 83,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 89,
+            "termGrade": 89,
+            "termPointGrade": 1.9,
+            "finalRating": 89,
+            "frPointGrade": 1.9
+          }
+        },
+        {
+          "id": "S09",
+          "targetFR": 88,
+          "originalGrade": 88,
+          "markPerTerm": {
+            "cs": 81,
+            "we": 81,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 88,
+            "termGrade": 88,
+            "termPointGrade": 2,
+            "finalRating": 88,
+            "frPointGrade": 2
+          }
+        },
+        {
+          "id": "S10",
+          "targetFR": 89,
+          "originalGrade": 89,
+          "markPerTerm": {
+            "cs": 83,
+            "we": 83,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 89,
+            "termGrade": 89,
+            "termPointGrade": 1.9,
+            "finalRating": 89,
+            "frPointGrade": 1.9
+          }
+        },
+        {
+          "id": "S11",
+          "targetFR": 89,
+          "originalGrade": 89,
+          "markPerTerm": {
+            "cs": 83,
+            "we": 83,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 89,
+            "termGrade": 89,
+            "termPointGrade": 1.9,
+            "finalRating": 89,
+            "frPointGrade": 1.9
+          }
+        },
+        {
+          "id": "S12",
+          "targetFR": 89,
+          "originalGrade": 89,
+          "markPerTerm": {
+            "cs": 83,
+            "we": 83,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 89,
+            "termGrade": 89,
+            "termPointGrade": 1.9,
+            "finalRating": 89,
+            "frPointGrade": 1.9
+          }
+        },
+        {
+          "id": "S13",
+          "targetFR": 83,
+          "originalGrade": 83,
+          "markPerTerm": {
+            "cs": 73,
+            "we": 73,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 83,
+            "termGrade": 83,
+            "termPointGrade": 2.4,
+            "finalRating": 83,
+            "frPointGrade": 2.4
+          }
+        },
+        {
+          "id": "S14",
+          "targetFR": 89,
+          "originalGrade": 89,
+          "markPerTerm": {
+            "cs": 83,
+            "we": 83,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 89,
+            "termGrade": 89,
+            "termPointGrade": 1.9,
+            "finalRating": 89,
+            "frPointGrade": 1.9
+          }
+        },
+        {
+          "id": "S15",
+          "targetFR": 86,
+          "originalGrade": 86,
+          "markPerTerm": {
+            "cs": 78,
+            "we": 78,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 86,
+            "termGrade": 86,
+            "termPointGrade": 2.1,
+            "finalRating": 86,
+            "frPointGrade": 2.1
+          }
+        },
+        {
+          "id": "S16",
+          "targetFR": 85,
+          "originalGrade": 85,
+          "markPerTerm": {
+            "cs": 76,
+            "we": 76,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 85,
+            "termGrade": 85,
+            "termPointGrade": 2.2,
+            "finalRating": 85,
+            "frPointGrade": 2.2
+          }
+        },
+        {
+          "id": "S17",
+          "targetFR": 90,
+          "originalGrade": 90,
+          "markPerTerm": {
+            "cs": 84,
+            "we": 84,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 90,
+            "termGrade": 90,
+            "termPointGrade": 1.8,
+            "finalRating": 90,
+            "frPointGrade": 1.8
+          }
+        },
+        {
+          "id": "S18",
+          "targetFR": 87,
+          "originalGrade": 87,
+          "markPerTerm": {
+            "cs": 79,
+            "we": 79,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 87,
+            "termGrade": 87,
+            "termPointGrade": 2.1,
+            "finalRating": 87,
+            "frPointGrade": 2.1
+          }
+        },
+        {
+          "id": "S19",
+          "targetFR": 89,
+          "originalGrade": 89,
+          "markPerTerm": {
+            "cs": 83,
+            "we": 83,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 89,
+            "termGrade": 89,
+            "termPointGrade": 1.9,
+            "finalRating": 89,
+            "frPointGrade": 1.9
+          }
+        },
+        {
+          "id": "S20",
+          "targetFR": 90,
+          "originalGrade": 90,
+          "markPerTerm": {
+            "cs": 84,
+            "we": 84,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 90,
+            "termGrade": 90,
+            "termPointGrade": 1.8,
+            "finalRating": 90,
+            "frPointGrade": 1.8
+          }
+        },
+        {
+          "id": "S21",
+          "targetFR": 89,
+          "originalGrade": 89,
+          "markPerTerm": {
+            "cs": 83,
+            "we": 83,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 89,
+            "termGrade": 89,
+            "termPointGrade": 1.9,
+            "finalRating": 89,
+            "frPointGrade": 1.9
+          }
+        },
+        {
+          "id": "S22",
+          "targetFR": 87,
+          "originalGrade": 87,
+          "markPerTerm": {
+            "cs": 79,
+            "we": 79,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 87,
+            "termGrade": 87,
+            "termPointGrade": 2.1,
+            "finalRating": 87,
+            "frPointGrade": 2.1
+          }
+        },
+        {
+          "id": "S23",
+          "targetFR": 89,
+          "originalGrade": 89,
+          "markPerTerm": {
+            "cs": 83,
+            "we": 83,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 89,
+            "termGrade": 89,
+            "termPointGrade": 1.9,
+            "finalRating": 89,
+            "frPointGrade": 1.9
+          }
+        },
+        {
+          "id": "S24",
+          "targetFR": 89,
+          "originalGrade": 89,
+          "markPerTerm": {
+            "cs": 83,
+            "we": 83,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 89,
+            "termGrade": 89,
+            "termPointGrade": 1.9,
+            "finalRating": 89,
+            "frPointGrade": 1.9
+          }
+        },
+        {
+          "id": "S25",
+          "targetFR": 88,
+          "originalGrade": 88,
+          "markPerTerm": {
+            "cs": 81,
+            "we": 81,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 88,
+            "termGrade": 88,
+            "termPointGrade": 2,
+            "finalRating": 88,
+            "frPointGrade": 2
+          }
+        },
+        {
+          "id": "S26",
+          "targetFR": 86,
+          "originalGrade": 86,
+          "markPerTerm": {
+            "cs": 78,
+            "we": 78,
+            "total": 100
+          },
+          "expected": {
+            "transmuted": 86,
+            "termGrade": 86,
+            "termPointGrade": 2.1,
+            "finalRating": 86,
+            "frPointGrade": 2.1
+          }
+        }
+      ]
+    }
+  }
+}

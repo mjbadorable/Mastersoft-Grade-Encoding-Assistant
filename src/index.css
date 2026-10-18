@@ -1,0 +1,17 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/inter';
+
+@theme {
+  --color-brand: #a90504;
+  --color-brand-dark: #8a0403;
+  --color-surface: #f8fafc;
+  --font-sans: 'Inter Variable', 'Poppins', system-ui, sans-serif;
+}
+
+body {
+  @apply bg-surface text-slate-900 antialiased;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}

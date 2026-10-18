@@ -1,0 +1,83 @@
+import { ShieldCheck } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { TERM_LABEL } from './app/labels';
+import { useActiveClass, useStore } from './app/store';
+import { BreakdownDrawer } from './components/BreakdownDrawer';
+import { ClassDialog } from './components/ClassDialog';
+import { MastersoftImportDialog } from './components/MastersoftDialogs';
+import { FinalRatingSummary } from './components/FinalRatingSummary';
+import { PrivacyNotice } from './components/PrivacyNotice';
+import { ReverseMode } from './components/ReverseMode';
+import { Sidebar } from './components/Sidebar';
+import { TermGradebook } from './components/TermGradebook';
+import { TransmutationReference } from './components/TransmutationReference';
+import { Button } from './components/ui/button';
+import { rules } from './engine';
+
+export function App() {
+  const { loaded, noticeSeen, acceptNotice, load, view } = useStore();
+  const active = useActiveClass();
+  const [privacyOpen, setPrivacyOpen] = useState(false);
+  const [newClass, setNewClass] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  if (!loaded) return null;
+
+  let content;
+  if (view === 'TABLE') content = <TransmutationReference />;
+  else if (!active)
+    content = (
+      <div className="m-auto max-w-sm text-center">
+        <h2 className="text-lg font-semibold">No class yet</h2>
+        <p className="mt-1 text-sm text-slate-500">Import the student list from a Mastersoft upload file, or create a class record by hand.</p>
+        <div className="mt-4 flex justify-center gap-2">
+          <Button onClick={() => setImportOpen(true)}>Import from Mastersoft</Button>
+          <Button variant="outline" onClick={() => setNewClass(true)}>
+            Create a class by hand
+          </Button>
+        </div>
+      </div>
+    );
+  else if (view === 'SUMMARY') content = <FinalRatingSummary record={active} />;
+  else if (view === 'REVERSE') content = <ReverseMode record={active} />;
+  else content = <TermGradebook key={`${active.id}-${view}`} record={active} term={view} />;
+
+  return (
+    <div className="flex h-screen flex-col">
+      <header className="flex h-12 shrink-0 items-center gap-4 bg-brand px-4 text-white">
+        <h1 className="text-sm font-semibold tracking-wide">Mastersoft Grade Encoding Assistant</h1>
+        {active && (
+          <span className="truncate text-sm text-white/85">
+            {active.subjectCode} {active.subjectName && `– ${active.subjectName}`} {active.section && `· ${active.section}`}
+            {view !== 'TABLE' && view !== 'SUMMARY' && view !== 'REVERSE' && ` · ${TERM_LABEL[view]}`}
+          </span>
+        )}
+        <span className="ml-auto rounded bg-white/15 px-2 py-0.5 text-xs" title="Version of the Mastersoft rules file">
+          Rules v{rules.version}
+        </span>
+        <button onClick={() => setPrivacyOpen(true)} className="flex items-center gap-1 text-xs text-white/85 hover:text-white">
+          <ShieldCheck className="size-4" /> Data Privacy
+        </button>
+      </header>
+      <div className="flex min-h-0 flex-1">
+        <Sidebar onPrivacy={() => setPrivacyOpen(true)} />
+        <main className="flex min-w-0 flex-1 flex-col overflow-hidden">{content}</main>
+      </div>
+      {active && <BreakdownDrawer record={active} />}
+      <ClassDialog open={newClass} onOpenChange={setNewClass} />
+      <MastersoftImportDialog open={importOpen} onOpenChange={setImportOpen} />
+      <PrivacyNotice
+        open={!noticeSeen || privacyOpen}
+        firstLaunch={!noticeSeen}
+        onContinue={() => {
+          acceptNotice();
+          setPrivacyOpen(false);
+        }}
+      />
+    </div>
+  );
+}

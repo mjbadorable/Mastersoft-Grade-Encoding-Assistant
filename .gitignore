@@ -1,0 +1,8 @@
+# Source spreadsheet and screenshots with real student data (D29)
+docs/source/
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/

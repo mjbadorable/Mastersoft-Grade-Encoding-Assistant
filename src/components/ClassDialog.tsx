@@ -1,0 +1,86 @@
+import { useState, type FormEvent } from 'react';
+import { SUBJECT_TYPES, subjectTypeLabel } from '../app/labels';
+import { useStore, type ClassInfo } from '../app/store';
+import type { ClassRecord } from '../app/types';
+import type { SubjectType } from '../engine';
+import { Button } from './ui/button';
+import { Dialog, DialogContent } from './ui/dialog';
+import { Input, Label, Select } from './ui/input';
+
+/** Create a class, or edit / delete an existing one (`record`). */
+export function ClassDialog({ open, onOpenChange, record }: { open: boolean; onOpenChange: (o: boolean) => void; record?: ClassRecord }) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent title={record ? 'Edit class' : 'New class'} description="One record per class and section, covering all 3 terms.">
+        {open && <ClassForm record={record} onDone={() => onOpenChange(false)} />}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ClassForm({ record, onDone }: { record?: ClassRecord; onDone: () => void }) {
+  const { createClass, updateClassInfo, deleteClass } = useStore();
+  const [info, setInfo] = useState<ClassInfo>({
+    subjectCode: record?.subjectCode ?? '',
+    subjectName: record?.subjectName ?? '',
+    section: record?.section ?? '',
+    subjectType: record?.subjectType ?? 'LEC',
+  });
+  const field = (key: keyof ClassInfo) => ({
+    value: info[key],
+    onChange: (e: { target: { value: string } }) => setInfo({ ...info, [key]: e.target.value }),
+  });
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    if (record) updateClassInfo(info);
+    else createClass(info);
+    onDone();
+  };
+  const remove = () => {
+    if (record && window.confirm(`Delete ${record.subjectCode || 'this class'} and all its scores from this browser?`)) {
+      deleteClass(record.id);
+      onDone();
+    }
+  };
+  return (
+    <form onSubmit={submit} className="grid gap-3">
+      <div className="grid grid-cols-2 gap-3">
+        <Label>
+          Subject code
+          <Input required placeholder="EE 231" autoFocus {...field('subjectCode')} />
+        </Label>
+        <Label>
+          Section
+          <Input placeholder="A" {...field('section')} />
+        </Label>
+      </div>
+      <Label>
+        Subject name
+        <Input placeholder="Electronics 1" {...field('subjectName')} />
+      </Label>
+      <Label>
+        Subject type (CS / WE weightage)
+        <Select
+          value={info.subjectType}
+          onChange={(e) => setInfo({ ...info, subjectType: e.target.value as SubjectType })}
+        >
+          {SUBJECT_TYPES.map((t) => (
+            <option key={t} value={t}>
+              {subjectTypeLabel(t)}
+            </option>
+          ))}
+        </Select>
+      </Label>
+      <div className="mt-2 flex items-center justify-between">
+        {record ? (
+          <Button variant="ghost" className="text-red-600 hover:bg-red-50" onClick={remove}>
+            Delete class
+          </Button>
+        ) : (
+          <span />
+        )}
+        <Button type="submit">{record ? 'Save' : 'Create class'}</Button>
+      </div>
+    </form>
+  );
+}

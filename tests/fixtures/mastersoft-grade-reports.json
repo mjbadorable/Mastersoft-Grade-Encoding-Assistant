@@ -1,0 +1,42 @@
+{
+  "source": "Mastersoft grade report screenshots (docs/source/mastersoft-grade-report-GE6.png, docs/source/mastersoft-grade-report-EE231a-EE231.png), transcribed 2026-10-18. One student record, Y2S1; no names shown.",
+  "notes": [
+    "Mastersoft shows only the weighted score per component, not the raw marks, so these cases start at the weighted score. 'transmuted' is derived as weightedScore / weight and is exact in every case.",
+    "These cases test weighting, term-grade rounding, term point grades and the Final Rating. They do not test scaling or the transmutation lookup."
+  ],
+  "subjects": [
+    {
+      "subjectCode": "GE 6",
+      "subjectType": "LEC",
+      "weights": { "cs": 0.5, "we": 0.5 },
+      "terms": {
+        "prelim":  { "csWeighted": 38.0, "weWeighted": 48.0, "csTransmuted": 76, "weTransmuted": 96, "termGrade": 86, "termPointGrade": 2.1 },
+        "midterm": { "csWeighted": 38.0, "weWeighted": 46.5, "csTransmuted": 76, "weTransmuted": 93, "termGrade": 85, "termPointGrade": 2.2 },
+        "final":   { "csWeighted": 40.5, "weWeighted": 47.5, "csTransmuted": 81, "weTransmuted": 95, "termGrade": 88, "termPointGrade": 2.0 }
+      },
+      "finalRating": { "raw": 86.7, "grade": 87, "pointGrade": 2.1 }
+    },
+    {
+      "subjectCode": "EE 231a",
+      "subjectType": "LAB",
+      "weights": { "cs": 0.7, "we": 0.3 },
+      "terms": {
+        "prelim":  { "csWeighted": 70.0, "weWeighted": 18.6, "csTransmuted": 100, "weTransmuted": 62, "termGrade": 89, "termPointGrade": 1.9 },
+        "midterm": { "csWeighted": 70.0, "weWeighted": 20.7, "csTransmuted": 100, "weTransmuted": 69, "termGrade": 91, "termPointGrade": 1.7 },
+        "final":   { "csWeighted": 51.8, "weWeighted": 27.3, "csTransmuted": 74,  "weTransmuted": 91, "termGrade": 79, "termPointGrade": 2.7 }
+      },
+      "finalRating": { "raw": 84.6, "grade": 85, "pointGrade": 2.2 }
+    },
+    {
+      "subjectCode": "EE 231",
+      "subjectType": "LEC",
+      "weights": { "cs": 0.5, "we": 0.5 },
+      "terms": {
+        "prelim":  { "csWeighted": 36.5, "weWeighted": 33.5, "csTransmuted": 73, "weTransmuted": 67, "termGrade": 70, "termPointGrade": 3.7 },
+        "midterm": { "csWeighted": 40.0, "weWeighted": 32.5, "csTransmuted": 80, "weTransmuted": 65, "termGrade": 73, "termPointGrade": 3.2 },
+        "final":   { "csWeighted": 42.0, "weWeighted": 36.5, "csTransmuted": 84, "weTransmuted": 73, "termGrade": 79, "termPointGrade": 2.7 }
+      },
+      "finalRating": { "raw": 75.4, "grade": 75, "pointGrade": 3.0 }
+    }
+  ]
+}

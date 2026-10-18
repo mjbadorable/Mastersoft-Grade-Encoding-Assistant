@@ -1,0 +1,756 @@
+{
+  "version": "1.0.0",
+  "notes": "Mastersoft grade rules. Source: docs/01_mastersoft_computation_spec.md. Weights are in basis points (1/10000) so the engine can use integer arithmetic.",
+  "transmutation": [
+    {
+      "pct": 100,
+      "transmuted": 100
+    },
+    {
+      "pct": 99,
+      "transmuted": 99
+    },
+    {
+      "pct": 98,
+      "transmuted": 99
+    },
+    {
+      "pct": 97,
+      "transmuted": 98
+    },
+    {
+      "pct": 96,
+      "transmuted": 98
+    },
+    {
+      "pct": 95,
+      "transmuted": 97
+    },
+    {
+      "pct": 94,
+      "transmuted": 96
+    },
+    {
+      "pct": 93,
+      "transmuted": 96
+    },
+    {
+      "pct": 92,
+      "transmuted": 95
+    },
+    {
+      "pct": 91,
+      "transmuted": 94
+    },
+    {
+      "pct": 90,
+      "transmuted": 94
+    },
+    {
+      "pct": 89,
+      "transmuted": 93
+    },
+    {
+      "pct": 88,
+      "transmuted": 93
+    },
+    {
+      "pct": 87,
+      "transmuted": 92
+    },
+    {
+      "pct": 86,
+      "transmuted": 91
+    },
+    {
+      "pct": 85,
+      "transmuted": 91
+    },
+    {
+      "pct": 84,
+      "transmuted": 90
+    },
+    {
+      "pct": 83,
+      "transmuted": 89
+    },
+    {
+      "pct": 82,
+      "transmuted": 89
+    },
+    {
+      "pct": 81,
+      "transmuted": 88
+    },
+    {
+      "pct": 80,
+      "transmuted": 88
+    },
+    {
+      "pct": 79,
+      "transmuted": 87
+    },
+    {
+      "pct": 78,
+      "transmuted": 86
+    },
+    {
+      "pct": 77,
+      "transmuted": 86
+    },
+    {
+      "pct": 76,
+      "transmuted": 85
+    },
+    {
+      "pct": 75,
+      "transmuted": 84
+    },
+    {
+      "pct": 74,
+      "transmuted": 84
+    },
+    {
+      "pct": 73,
+      "transmuted": 83
+    },
+    {
+      "pct": 72,
+      "transmuted": 83
+    },
+    {
+      "pct": 71,
+      "transmuted": 82
+    },
+    {
+      "pct": 70,
+      "transmuted": 81
+    },
+    {
+      "pct": 69,
+      "transmuted": 81
+    },
+    {
+      "pct": 68,
+      "transmuted": 80
+    },
+    {
+      "pct": 67,
+      "transmuted": 79
+    },
+    {
+      "pct": 66,
+      "transmuted": 79
+    },
+    {
+      "pct": 65,
+      "transmuted": 78
+    },
+    {
+      "pct": 64,
+      "transmuted": 78
+    },
+    {
+      "pct": 63,
+      "transmuted": 77
+    },
+    {
+      "pct": 62,
+      "transmuted": 76
+    },
+    {
+      "pct": 61,
+      "transmuted": 76
+    },
+    {
+      "pct": 60,
+      "transmuted": 75
+    },
+    {
+      "pct": 59,
+      "transmuted": 74
+    },
+    {
+      "pct": 58,
+      "transmuted": 74
+    },
+    {
+      "pct": 57,
+      "transmuted": 74
+    },
+    {
+      "pct": 56,
+      "transmuted": 73
+    },
+    {
+      "pct": 55,
+      "transmuted": 73
+    },
+    {
+      "pct": 54,
+      "transmuted": 73
+    },
+    {
+      "pct": 53,
+      "transmuted": 73
+    },
+    {
+      "pct": 52,
+      "transmuted": 73
+    },
+    {
+      "pct": 51,
+      "transmuted": 73
+    },
+    {
+      "pct": 50,
+      "transmuted": 73
+    },
+    {
+      "pct": 49,
+      "transmuted": 72
+    },
+    {
+      "pct": 48,
+      "transmuted": 72
+    },
+    {
+      "pct": 47,
+      "transmuted": 72
+    },
+    {
+      "pct": 46,
+      "transmuted": 72
+    },
+    {
+      "pct": 45,
+      "transmuted": 71
+    },
+    {
+      "pct": 44,
+      "transmuted": 71
+    },
+    {
+      "pct": 43,
+      "transmuted": 71
+    },
+    {
+      "pct": 42,
+      "transmuted": 71
+    },
+    {
+      "pct": 41,
+      "transmuted": 70
+    },
+    {
+      "pct": 40,
+      "transmuted": 70
+    },
+    {
+      "pct": 39,
+      "transmuted": 70
+    },
+    {
+      "pct": 38,
+      "transmuted": 70
+    },
+    {
+      "pct": 37,
+      "transmuted": 69
+    },
+    {
+      "pct": 36,
+      "transmuted": 69
+    },
+    {
+      "pct": 35,
+      "transmuted": 69
+    },
+    {
+      "pct": 34,
+      "transmuted": 69
+    },
+    {
+      "pct": 33,
+      "transmuted": 68
+    },
+    {
+      "pct": 32,
+      "transmuted": 68
+    },
+    {
+      "pct": 31,
+      "transmuted": 68
+    },
+    {
+      "pct": 30,
+      "transmuted": 68
+    },
+    {
+      "pct": 29,
+      "transmuted": 67
+    },
+    {
+      "pct": 28,
+      "transmuted": 67
+    },
+    {
+      "pct": 27,
+      "transmuted": 67
+    },
+    {
+      "pct": 26,
+      "transmuted": 67
+    },
+    {
+      "pct": 25,
+      "transmuted": 66
+    },
+    {
+      "pct": 24,
+      "transmuted": 66
+    },
+    {
+      "pct": 23,
+      "transmuted": 66
+    },
+    {
+      "pct": 22,
+      "transmuted": 66
+    },
+    {
+      "pct": 21,
+      "transmuted": 65
+    },
+    {
+      "pct": 20,
+      "transmuted": 65
+    },
+    {
+      "pct": 19,
+      "transmuted": 65
+    },
+    {
+      "pct": 18,
+      "transmuted": 65
+    },
+    {
+      "pct": 17,
+      "transmuted": 64
+    },
+    {
+      "pct": 16,
+      "transmuted": 64
+    },
+    {
+      "pct": 15,
+      "transmuted": 64
+    },
+    {
+      "pct": 14,
+      "transmuted": 64
+    },
+    {
+      "pct": 13,
+      "transmuted": 63
+    },
+    {
+      "pct": 12,
+      "transmuted": 63
+    },
+    {
+      "pct": 11,
+      "transmuted": 63
+    },
+    {
+      "pct": 10,
+      "transmuted": 63
+    },
+    {
+      "pct": 9,
+      "transmuted": 62
+    },
+    {
+      "pct": 8,
+      "transmuted": 62
+    },
+    {
+      "pct": 7,
+      "transmuted": 62
+    },
+    {
+      "pct": 6,
+      "transmuted": 62
+    },
+    {
+      "pct": 5,
+      "transmuted": 61
+    },
+    {
+      "pct": 4,
+      "transmuted": 61
+    },
+    {
+      "pct": 3,
+      "transmuted": 61
+    },
+    {
+      "pct": 2,
+      "transmuted": 61
+    },
+    {
+      "pct": 1,
+      "transmuted": 60
+    },
+    {
+      "pct": 0,
+      "transmuted": 60
+    }
+  ],
+  "unverifiedBelowPct": 38,
+  "termPointGrades": [
+    {
+      "grade": 100,
+      "point": 1.0,
+      "verified": true
+    },
+    {
+      "grade": 99,
+      "point": 1.1,
+      "verified": true
+    },
+    {
+      "grade": 98,
+      "point": 1.2,
+      "verified": true
+    },
+    {
+      "grade": 97,
+      "point": 1.3,
+      "verified": true
+    },
+    {
+      "grade": 96,
+      "point": 1.3,
+      "verified": true
+    },
+    {
+      "grade": 95,
+      "point": 1.4,
+      "verified": true
+    },
+    {
+      "grade": 94,
+      "point": 1.5,
+      "verified": true
+    },
+    {
+      "grade": 93,
+      "point": 1.6,
+      "verified": true
+    },
+    {
+      "grade": 92,
+      "point": 1.7,
+      "verified": true
+    },
+    {
+      "grade": 91,
+      "point": 1.7,
+      "verified": true
+    },
+    {
+      "grade": 90,
+      "point": 1.8,
+      "verified": true
+    },
+    {
+      "grade": 89,
+      "point": 1.9,
+      "verified": true
+    },
+    {
+      "grade": 88,
+      "point": 2.0,
+      "verified": true
+    },
+    {
+      "grade": 87,
+      "point": 2.1,
+      "verified": true
+    },
+    {
+      "grade": 86,
+      "point": 2.1,
+      "verified": true
+    },
+    {
+      "grade": 85,
+      "point": 2.2,
+      "verified": true
+    },
+    {
+      "grade": 84,
+      "point": 2.3,
+      "verified": true
+    },
+    {
+      "grade": 83,
+      "point": 2.4,
+      "verified": true
+    },
+    {
+      "grade": 82,
+      "point": 2.5,
+      "verified": true
+    },
+    {
+      "grade": 81,
+      "point": 2.5,
+      "verified": true
+    },
+    {
+      "grade": 80,
+      "point": 2.6,
+      "verified": true
+    },
+    {
+      "grade": 79,
+      "point": 2.7,
+      "verified": true
+    },
+    {
+      "grade": 78,
+      "point": 2.8,
+      "verified": true
+    },
+    {
+      "grade": 77,
+      "point": 2.9,
+      "verified": true
+    },
+    {
+      "grade": 76,
+      "point": 2.9,
+      "verified": true
+    },
+    {
+      "grade": 75,
+      "point": 3.0,
+      "verified": true
+    },
+    {
+      "grade": 74,
+      "point": 3.1,
+      "verified": false
+    },
+    {
+      "grade": 73,
+      "point": 3.2,
+      "verified": true
+    },
+    {
+      "grade": 72,
+      "point": 3.4,
+      "verified": false
+    },
+    {
+      "grade": 71,
+      "point": 3.6,
+      "verified": false
+    },
+    {
+      "grade": 70,
+      "point": 3.7,
+      "verified": true
+    },
+    {
+      "grade": 69,
+      "point": 3.8,
+      "verified": false
+    },
+    {
+      "grade": 68,
+      "point": 3.9,
+      "verified": false
+    },
+    {
+      "grade": 67,
+      "point": 4.1,
+      "verified": false
+    },
+    {
+      "grade": 66,
+      "point": 4.2,
+      "verified": false
+    },
+    {
+      "grade": 65,
+      "point": 4.3,
+      "verified": false
+    },
+    {
+      "grade": 64,
+      "point": 4.5,
+      "verified": false
+    },
+    {
+      "grade": 63,
+      "point": 4.6,
+      "verified": false
+    },
+    {
+      "grade": 62,
+      "point": 4.7,
+      "verified": false
+    },
+    {
+      "grade": 61,
+      "point": 4.9,
+      "verified": false
+    },
+    {
+      "grade": 60,
+      "point": 5.0,
+      "verified": false
+    }
+  ],
+  "transcriptPointGrades": [
+    {
+      "grade": 100,
+      "point": 1.0
+    },
+    {
+      "grade": 99,
+      "point": 1.1
+    },
+    {
+      "grade": 98,
+      "point": 1.2
+    },
+    {
+      "grade": 97,
+      "point": 1.3
+    },
+    {
+      "grade": 96,
+      "point": 1.3
+    },
+    {
+      "grade": 95,
+      "point": 1.4
+    },
+    {
+      "grade": 94,
+      "point": 1.5
+    },
+    {
+      "grade": 93,
+      "point": 1.6
+    },
+    {
+      "grade": 92,
+      "point": 1.7
+    },
+    {
+      "grade": 91,
+      "point": 1.7
+    },
+    {
+      "grade": 90,
+      "point": 1.8
+    },
+    {
+      "grade": 89,
+      "point": 1.9
+    },
+    {
+      "grade": 88,
+      "point": 2.0
+    },
+    {
+      "grade": 87,
+      "point": 2.1
+    },
+    {
+      "grade": 86,
+      "point": 2.1
+    },
+    {
+      "grade": 85,
+      "point": 2.2
+    },
+    {
+      "grade": 84,
+      "point": 2.3
+    },
+    {
+      "grade": 83,
+      "point": 2.4
+    },
+    {
+      "grade": 82,
+      "point": 2.5
+    },
+    {
+      "grade": 81,
+      "point": 2.5
+    },
+    {
+      "grade": 80,
+      "point": 2.6
+    },
+    {
+      "grade": 79,
+      "point": 2.7
+    },
+    {
+      "grade": 78,
+      "point": 2.8
+    },
+    {
+      "grade": 77,
+      "point": 2.9
+    },
+    {
+      "grade": 76,
+      "point": 2.9
+    },
+    {
+      "grade": 75,
+      "point": 3.0
+    }
+  ],
+  "transcriptFailingPoint": 5.0,
+  "passingGrade": 75,
+  "weightBp": {
+    "LEC": {
+      "cs": 5000,
+      "we": 5000
+    },
+    "LAB": {
+      "cs": 7000,
+      "we": 3000
+    },
+    "COMPOSITE": {
+      "cs": 3333,
+      "we": 6667
+    }
+  },
+  "finalRatingBp": {
+    "PRELIM": 2000,
+    "MIDTERM": 3000,
+    "FINAL": 5000
+  },
+  "statusPriority": [
+    "DRP",
+    "WP",
+    "INC",
+    "HNA",
+    "ABS"
+  ],
+  "carryForwardStatuses": [
+    "DRP",
+    "WP"
+  ]
+}
