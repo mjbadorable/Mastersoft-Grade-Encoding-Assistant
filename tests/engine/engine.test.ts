@@ -93,13 +93,16 @@ describe('transmutation table', () => {
   });
 });
 
-describe('point grades (D19, D31, D32)', () => {
-  it('uses the term table below 75, with only 70 and 73 verified', () => {
+describe('point grades (D19, D31, D32, D36)', () => {
+  it('uses the term table from 68 to 74, with only 70 and 73 verified', () => {
     expect(pointGrade(73, 'term')).toEqual({ point: 3.2, verified: true });
     expect(pointGrade(70, 'term')).toEqual({ point: 3.7, verified: true });
     expect(pointGrade(74, 'term')).toEqual({ point: 3.1, verified: false });
-    expect(pointGrade(67, 'term')).toEqual({ point: 4.1, verified: false });
-    expect(pointGrade(60, 'term')).toEqual({ point: 5.0, verified: false });
+    expect(pointGrade(68, 'term')).toEqual({ point: 3.9, verified: false });
+  });
+
+  it('gives 5.0 for term grades worse than 3.9 (60–67), as Mastersoft does (D36)', () => {
+    for (let g = 60; g <= 67; g++) expect(pointGrade(g, 'term')).toEqual({ point: 5.0, verified: true });
   });
 
   it('uses 5.0 below 75 on the transcript', () => {

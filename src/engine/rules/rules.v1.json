@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0",
+  "version": "1.1.0",
   "notes": "Mastersoft grade rules. Source: docs/01_mastersoft_computation_spec.md. Weights are in basis points (1/10000) so the engine can use integer arithmetic.",
   "transmutation": [
     {
@@ -576,43 +576,43 @@
     },
     {
       "grade": 67,
-      "point": 4.1,
-      "verified": false
+      "point": 5.0,
+      "verified": true
     },
     {
       "grade": 66,
-      "point": 4.2,
-      "verified": false
+      "point": 5.0,
+      "verified": true
     },
     {
       "grade": 65,
-      "point": 4.3,
-      "verified": false
+      "point": 5.0,
+      "verified": true
     },
     {
       "grade": 64,
-      "point": 4.5,
-      "verified": false
+      "point": 5.0,
+      "verified": true
     },
     {
       "grade": 63,
-      "point": 4.6,
-      "verified": false
+      "point": 5.0,
+      "verified": true
     },
     {
       "grade": 62,
-      "point": 4.7,
-      "verified": false
+      "point": 5.0,
+      "verified": true
     },
     {
       "grade": 61,
-      "point": 4.9,
-      "verified": false
+      "point": 5.0,
+      "verified": true
     },
     {
       "grade": 60,
       "point": 5.0,
-      "verified": false
+      "verified": true
     }
   ],
   "transcriptPointGrades": [

@@ -210,3 +210,24 @@ export function reverseOutcome(record: ClassRecord, student: Student): ReverseOu
 }
 
 export const formatPoint = (p: number) => p.toFixed(1);
+
+/** Student ID as compared for duplicates: spaces and letter case ignored. */
+const idKey = (studentId: string) => studentId.replace(/\s+/g, '').toUpperCase();
+
+/**
+ * Student IDs used by more than one student in the class (REQ-12, TC-020), mapped to
+ * those students in class order. Blank IDs are not counted.
+ */
+export function duplicateStudentIds(students: Student[]): Map<string, Student[]> {
+  const byId = new Map<string, Student[]>();
+  for (const s of students) {
+    const key = idKey(s.studentId);
+    if (key) byId.set(key, [...(byId.get(key) ?? []), s]);
+  }
+  return new Map([...byId].filter(([, list]) => list.length > 1));
+}
+
+/** The other students sharing this student's ID, or [] when it is unique. */
+export function sameIdAs(duplicates: Map<string, Student[]>, student: Student): Student[] {
+  return (duplicates.get(idKey(student.studentId)) ?? []).filter((s) => s !== student);
+}

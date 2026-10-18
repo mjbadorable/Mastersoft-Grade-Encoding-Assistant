@@ -10,7 +10,7 @@ import { Button } from './ui/button';
 
 const POINT_OPTIONS = [...new Set(rules.transcriptPointGrades.map((r) => r.point)), rules.transcriptFailingPoint].sort((a, b) => a - b);
 
-/** Reverse mode (D11, D28): target Final Rating → the marks to encode in all 3 terms. */
+/** Final Rating Only mode, internally "reverse mode" (D11, D28, D38): target Final Rating → the marks to encode in all 3 terms. */
 export function ReverseMode({ record }: { record: ClassRecord }) {
   const { setReverse, setStudentField, addStudent } = useStore();
   const th = 'border-b border-slate-200 bg-slate-100 px-2 py-2 text-left text-xs font-semibold text-slate-600';
@@ -21,10 +21,11 @@ export function ReverseMode({ record }: { record: ClassRecord }) {
     <>
       <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4 py-2.5">
         <div>
-          <h2 className="text-base font-semibold">Reverse mode</h2>
+          <h2 className="text-base font-semibold">Final Rating Only mode</h2>
           <p className="text-xs text-slate-500">
-            For internship or thesis: enter the Final Rating you want, and get the marks that make Mastersoft produce it. Uses the class's{' '}
-            {subjectTypeLabel(record.subjectType)} weightage.
+            For classes where only the Final Rating is encoded (internship, thesis): enter each student's Final Rating, and get the Class
+            Standing and Written Exam marks to encode in every term so Mastersoft produces it. Uses the class's {subjectTypeLabel(record.subjectType)}{' '}
+            weightage.
           </p>
         </div>
         <Button size="sm" variant="outline" className="ml-auto" onClick={addStudent}>

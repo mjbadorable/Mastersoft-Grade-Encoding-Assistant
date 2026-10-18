@@ -15,3 +15,28 @@ body {
 .tabular {
   font-variant-numeric: tabular-nums;
 }
+
+/* Encoding Guide printing: only the print copy is printed. */
+.print-root {
+  display: none;
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 12mm;
+  }
+  body {
+    background: white;
+  }
+  body > *:not(.print-root) {
+    display: none !important;
+  }
+  .print-root {
+    display: block;
+  }
+  .print-root * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

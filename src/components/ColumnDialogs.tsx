@@ -3,6 +3,7 @@ import { useState, type FormEvent } from 'react';
 import { useStore } from '../app/store';
 import type { Category, Column, Component, TermSetup } from '../app/types';
 import { sumMarks, type Term } from '../engine';
+import { confirmAction } from './ConfirmDialog';
 import { Button } from './ui/button';
 import { Dialog, DialogContent } from './ui/dialog';
 import { Input, Label, Select } from './ui/input';
@@ -14,27 +15,29 @@ interface ColumnDialogProps {
   column: Column | 'new' | null;
   onClose: () => void;
   hasScores: (columnId: string) => boolean;
+  /** Component picked when adding a new column. */
+  defaultComponent?: Component;
 }
 
-export function ColumnDialog({ term, setup, column, onClose, hasScores }: ColumnDialogProps) {
+export function ColumnDialog({ term, setup, column, onClose, hasScores, defaultComponent }: ColumnDialogProps) {
   return (
     <Dialog open={column !== null} onOpenChange={(o) => !o && onClose()}>
       <DialogContent
         title={column === 'new' ? 'Add column' : 'Edit column'}
         description="Tag each column as Class Standing or Written Exam; the app adds them into Mastersoft's two totals."
       >
-        {column !== null && <ColumnForm term={term} setup={setup} column={column} onClose={onClose} hasScores={hasScores} />}
+        {column !== null && <ColumnForm term={term} setup={setup} column={column} onClose={onClose} hasScores={hasScores} defaultComponent={defaultComponent} />}
       </DialogContent>
     </Dialog>
   );
 }
 
-function ColumnForm({ term, setup, column, onClose, hasScores }: ColumnDialogProps & { column: Column | 'new' }) {
+function ColumnForm({ term, setup, column, onClose, hasScores, defaultComponent }: ColumnDialogProps & { column: Column | 'new' }) {
   const { saveColumn, deleteColumn } = useStore();
   const existing = column === 'new' ? undefined : column;
   const [label, setLabel] = useState(existing?.label ?? '');
   const [max, setMax] = useState(existing ? String(existing.maxScore) : '');
-  const [component, setComponent] = useState<Component>(existing?.component ?? 'CS');
+  const [component, setComponent] = useState<Component>(existing?.component ?? defaultComponent ?? 'CS');
   const [categoryId, setCategoryId] = useState(existing?.categoryId ?? setup.categories[0]?.id ?? '');
   const weighted = setup.csMode === 'WEIGHTED_CATEGORIES';
   const maxScore = Number(max);
@@ -52,9 +55,14 @@ function ColumnForm({ term, setup, column, onClose, hasScores }: ColumnDialogPro
     });
     onClose();
   };
-  const remove = () => {
+  const remove = async () => {
     if (!existing) return;
-    if (hasScores(existing.id) && !window.confirm(`Delete "${existing.label}" and the scores typed in it?`)) return;
+    if (
+      hasScores(existing.id) &&
+      !(await confirmAction({ title: 'Delete column?', message: `"${existing.label}" and the scores typed in it will be deleted.`, confirmLabel: 'Delete column' }))
+    ) {
+      return;
+    }
     deleteColumn(term, existing.id);
     onClose();
   };

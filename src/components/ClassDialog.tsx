@@ -3,6 +3,7 @@ import { SUBJECT_TYPES, subjectTypeLabel } from '../app/labels';
 import { useStore, type ClassInfo } from '../app/store';
 import type { ClassRecord } from '../app/types';
 import type { SubjectType } from '../engine';
+import { confirmAction } from './ConfirmDialog';
 import { Button } from './ui/button';
 import { Dialog, DialogContent } from './ui/dialog';
 import { Input, Label, Select } from './ui/input';
@@ -36,11 +37,17 @@ function ClassForm({ record, onDone }: { record?: ClassRecord; onDone: () => voi
     else createClass(info);
     onDone();
   };
-  const remove = () => {
-    if (record && window.confirm(`Delete ${record.subjectCode || 'this class'} and all its scores from this browser?`)) {
-      deleteClass(record.id);
-      onDone();
-    }
+  const remove = async () => {
+    if (!record) return;
+    const name = [record.subjectCode, record.section].filter(Boolean).join(' · ') || 'this class';
+    const ok = await confirmAction({
+      title: 'Delete class?',
+      message: `${name} and all its students and scores will be removed from this browser. Download a backup first if you may need it again.`,
+      confirmLabel: 'Delete class',
+    });
+    if (!ok) return;
+    deleteClass(record.id);
+    onDone();
   };
   return (
     <form onSubmit={submit} className="grid gap-3">

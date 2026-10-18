@@ -14,6 +14,7 @@ import {
 import { useActiveClass, useStore } from '../app/store';
 import type { ClassRecord, Component } from '../app/types';
 import type { Term } from '../engine';
+import { downloadFile, XLSX_TYPE } from '../lib/download';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Dialog, DialogContent } from './ui/dialog';
@@ -186,15 +187,7 @@ function ExportCard({ record, term, component }: { record: ClassRecord; term: Te
   const canDownload = plan.blockers.length === 0 && outOfMatches;
   const title = `${TERM_LABEL[term]} – ${COMPONENT_LABEL[component]}`;
 
-  const download = () => {
-    const bytes = buildMastersoftFile(plan.rows);
-    const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = exportFileName(record, term, component);
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  };
+  const download = () => downloadFile(buildMastersoftFile(plan.rows) as BlobPart, exportFileName(record, term, component), XLSX_TYPE);
 
   return (
     <section className="rounded-md border border-slate-200 p-4 text-sm">

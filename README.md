@@ -33,6 +33,7 @@ It also imports the student list from Mastersoft's upload template and exports *
 
 | Area | What it does |
 |---|---|
+| **Step-by-step guide** | Each term shows four steps (add students, set up columns, enter scores, encode in Mastersoft), marks what is done, and offers the next action. A status bar counts graded, blank and invalid rows and jumps to the next blank or error. |
 | **Gradebook** (NEO LMS style) | One record per class and section covering Prelim, Midterm and Final. Add Class Standing (CS) and Written Exam (WE) columns, then type or paste scores from Excel. |
 | **Assessment Component banner** | The exact CS and WE Total Marks to set in Mastersoft, with copy buttons. |
 | **Mastersoft output columns** | CS mark, WE mark, term grade and point grade for every student, computed by the engine. |
@@ -40,7 +41,10 @@ It also imports the student list from Mastersoft's upload template and exports *
 | **Class Standing modes** | *Raw sum* (Mastersoft default) or *Weighted categories* (e.g. Quiz 40% + Activity 60%), which converts to a mark out of 100. |
 | **Statuses** | INC, ABS, HNA, DRP, WP per student per term. DRP and WP carry forward to later terms. |
 | **Final Rating summary** | 20% Prelim + 30% Midterm + 50% Final, rounded half-up, plus the minimum Final grade needed to pass. |
-| **Reverse mode** | For internship or thesis: enter the target Final Rating and get the marks that make Mastersoft produce it. |
+| **Final Rating Only mode** | For classes where only the Final Rating is encoded (internship, thesis): enter each student's Final Rating and get the marks that make Mastersoft produce it. |
+| **Excel import** | Import scores from your own class record: pick the sheet, the name/ID columns and the score columns (CS or WE, with max scores). Mappings can be saved as templates; blank and invalid cells are highlighted. |
+| **Encoding Guide** | Per term: the Total Marks box and each student's marks and grades in Mastersoft's order. Print it, save it as PDF, or download it as `.xlsx`. |
+| **Backup and restore** | Download a class as a JSON backup file and restore it on any computer. |
 | **Mastersoft import / export** | Import the student list from Mastersoft's "Upload Grade Encoding" file, keeping its row order. Export Class Standing and Written Exam files in the same format, ready to upload. |
 | **Warnings** | Amber "unverified" badges where a rule isn't yet confirmed against real Mastersoft data. Red highlights for invalid scores. |
 | **Privacy** | Data Privacy Notice (RA 10173) on first launch. Records are saved only in this browser's IndexedDB. |
@@ -68,8 +72,9 @@ flowchart TB
     RULES["Rules config (JSON)
     transmutation table, point-grade tables,
     weightages, Final Rating split"]
-    IO["Mastersoft file I/O (SheetJS)
-    import student list, export upload files"]
+    IO["File I/O (SheetJS, print CSS)
+    Mastersoft files, Excel import,
+    Encoding Guide, JSON backup"]
     DB[("IndexedDB (Dexie)
     saved class records, notice-seen flag")]
 
@@ -94,7 +99,7 @@ flowchart TB
 | **Rules config** (`src/engine/rules/rules.v1.json`) | Transmutation table, point-grade tables, weightages, FR split | Data, not code. If Mastersoft changes a table, only this file changes |
 | **Gradebook adapter** (`src/app/gradebook.ts`) | Turns a class record into engine inputs and returns the results | The UI never calculates grades itself |
 | **State and storage** (`src/app/store.ts`, `db.ts`) | Current classes, columns, scores and statuses; auto-save | Data stays in the browser |
-| **Mastersoft file I/O** (`src/app/mastersoftFile.ts`) | Reads and writes Mastersoft's upload template | Keeps the file's row order and text exactly |
+| **File I/O** (`src/app/mastersoftFile.ts`, `excelImport.ts`, `encodingGuide.ts`, `backup.ts`) | Mastersoft upload template, smart Excel import, Encoding Guide, backup/restore | Keeps Mastersoft's row order and text exactly; never computes grades itself |
 | **Presentation** (`src/components`) | Gradebook, dialogs, drawer, summaries | Displays only what the engine returns |
 
 ---
@@ -184,7 +189,7 @@ All rounding is half-up on integer hundredths (`roundHalfUp`), never `Math.round
 ├── src/
 │   ├── engine/                 # Pure TypeScript grade engine (no UI code)
 │   │   ├── compute.ts          # scale, transmute, term grade, Final Rating, min Final needed
-│   │   ├── reverse.ts          # Reverse mode: target grade → marks
+│   │   ├── reverse.ts          # Final Rating Only mode: target grade → marks
 │   │   ├── status.ts           # INC/ABS/HNA/DRP/WP, carry-forward, FR status
 │   │   ├── weightedCategories.ts
 │   │   ├── rounding.ts         # roundHalfUp, sumMarks (exact decimal math)
@@ -193,6 +198,9 @@ All rounding is half-up on integer hundredths (`roundHalfUp`), never `Math.round
 │   ├── app/                    # State and adapters
 │   │   ├── gradebook.ts        # Class record → engine → results
 │   │   ├── mastersoftFile.ts   # Mastersoft upload template import/export
+│   │   ├── excelImport.ts      # Smart import from teachers' own class records
+│   │   ├── encodingGuide.ts    # Encoding Guide data and .xlsx export
+│   │   ├── backup.ts           # JSON backup and restore
 │   │   ├── store.ts            # Zustand store with auto-save
 │   │   ├── db.ts               # IndexedDB (Dexie)
 │   │   ├── types.ts            # Data model
@@ -262,7 +270,7 @@ Student names, IDs and scores are processed and saved only in the teacher's brow
 | Phase | Status |
 |---|---|
 | 1. Computation engine and tests | Done |
-| 2. Gradebook UI, reverse mode, Mastersoft import/export | Done |
-| 3. Import from teachers' own Excel class records, PDF encoding guide, backup/restore | Planned |
+| 2. Gradebook UI, Final Rating Only mode, Mastersoft import/export | Done |
+| 3. Import from teachers' own Excel class records, PDF/.xlsx Encoding Guide, backup/restore | Done |
 | 4. Pilot with faculty; add a raw-mark test case from Mastersoft | Planned |
 | 5. Optional accounts and admin backend | Optional |

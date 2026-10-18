@@ -3,7 +3,7 @@
 // the student rows exactly as written; the export writes them back with only Marks filled.
 import * as XLSX from 'xlsx';
 import type { SubjectType, Term } from '../engine';
-import { termOutcome, termSetupIssues, assessmentTotals } from './gradebook';
+import { duplicateStudentIds, termOutcome, termSetupIssues, assessmentTotals } from './gradebook';
 import type { ClassRecord, Component, MastersoftRow, Student } from './types';
 
 export const MASTERSOFT_HEADERS = ['Student Id', 'Student Name', 'Subject', 'Campus', 'Section', 'Semester', 'Marks'] as const;
@@ -173,6 +173,9 @@ export function planExport(record: ClassRecord, term: Term, component: Component
   if (issues.length > 0) {
     plan.blockers.push(...issues);
     return plan;
+  }
+  for (const [, list] of duplicateStudentIds(record.students)) {
+    plan.blockers.push(`Student ID ${list[0]!.studentId.trim()} is used by more than one student: ${list.map(label).join(', ')}. Each student can appear only once.`);
   }
 
   const incomplete: string[] = [];

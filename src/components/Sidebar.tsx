@@ -1,9 +1,10 @@
-import { BookOpen, Calculator, ClipboardList, FileUp, Pencil, Plus, ShieldCheck, Table2 } from 'lucide-react';
+import { BookOpen, Calculator, CheckCircle2, ClipboardList, FileUp, Pencil, Plus, ShieldCheck, Table2 } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { TERM_LABEL, termWeightLabel } from '../app/labels';
+import { termProgress } from '../app/progress';
 import { useActiveClass, useStore } from '../app/store';
-import type { View } from '../app/types';
-import { TERMS } from '../engine';
+import type { ClassRecord, View } from '../app/types';
+import { TERMS, type Term } from '../engine';
 import { cn } from '../lib/utils';
 import { ClassDialog } from './ClassDialog';
 import { MastersoftImportDialog } from './MastersoftDialogs';
@@ -23,7 +24,7 @@ export function Sidebar({ onPrivacy }: { onPrivacy: () => void }) {
       aria-current={view === v ? 'page' : undefined}
       className={cn(
         'flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-50',
-        view === v && 'bg-brand/10 font-semibold text-brand hover:bg-brand/10',
+        (active || v === 'TABLE') && view === v && 'bg-brand/10 font-semibold text-brand hover:bg-brand/10',
       )}
     >
       {icon}
@@ -66,14 +67,18 @@ export function Sidebar({ onPrivacy }: { onPrivacy: () => void }) {
           item(
             t,
             <ClipboardList className="size-4" />,
-            <span className="flex flex-1 justify-between">
-              {TERM_LABEL[t]} <span className="text-xs font-normal text-slate-400">{termWeightLabel(t)}</span>
+            <span className="flex flex-1 items-center justify-between gap-2">
+              {TERM_LABEL[t]}
+              <span className="flex items-center gap-1.5">
+                {active && <TermMark record={active} term={t} />}
+                <span className="text-xs font-normal text-slate-400">{termWeightLabel(t)}</span>
+              </span>
             </span>,
           ),
         )}
         {item('SUMMARY', <BookOpen className="size-4" />, 'Final Rating summary')}
         <p className="px-3 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Tools</p>
-        {item('REVERSE', <Calculator className="size-4" />, 'Reverse mode')}
+        {item('REVERSE', <Calculator className="size-4" />, 'Final Rating Only')}
         {item('TABLE', <Table2 className="size-4" />, 'Transmutation table')}
       </nav>
 
@@ -84,5 +89,18 @@ export function Sidebar({ onPrivacy }: { onPrivacy: () => void }) {
       <MastersoftImportDialog open={dialog === 'import'} onOpenChange={(o) => !o && setDialog(null)} />
       <ClassDialog open={dialog === 'new' || dialog === 'edit'} onOpenChange={(o) => !o && setDialog(null)} record={dialog === 'edit' ? (active ?? undefined) : undefined} />
     </aside>
+  );
+}
+
+/** Green check when a term is done; amber count of students still needing scores. */
+function TermMark({ record, term }: { record: ClassRecord; term: Term }) {
+  const p = termProgress(record, term);
+  if (p.complete) return <CheckCircle2 className="size-3.5 text-emerald-600" aria-label="All scores in" />;
+  const left = p.missing + p.invalid;
+  if (p.setupIssues.length > 0 || left === 0) return null;
+  return (
+    <span className="rounded-full bg-amber-100 px-1.5 text-[10px] font-semibold text-amber-800" title={`${left} student(s) still need scores`}>
+      {left}
+    </span>
   );
 }

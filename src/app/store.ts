@@ -1,15 +1,18 @@
 // Single source of truth for the open class records (blueprint §3, State Layer).
-// Every change to a class is auto-saved to IndexedDB.
+// Every change to a class is saved to IndexedDB through the save queue, which re-applies
+// it to the latest saved record so open tabs never overwrite each other (TC-028).
 import { create } from 'zustand';
 import type { Status, SubjectType, Term } from '../engine';
-import { db, getMeta, setMeta } from './db';
+import { announceChanges, classStorage, db, getMeta, onOtherTabChanges, setMeta } from './db';
+import { mergeImportedScores, type ImportedRow, type ImportMapping, type MergeScoresResult } from './excelImport';
 import { mergeMastersoftRows, subjectTypeFromSubject, tidy, type MastersoftFile, type MergeResult } from './mastersoftFile';
+import { SaveQueue, type SaveStatus } from './saveQueue';
 import type { Category, ClassRecord, Column, CsMode, ReverseInput, Student, TermSetup, View } from './types';
 
-const newId = () => crypto.randomUUID();
+const newId = (): string => crypto.randomUUID();
 const emptyTerm = (): TermSetup => ({ csMode: 'RAW_SUM', categories: [], columns: [] });
 
-export const newStudent = (): Student => ({ id: newId(), studentId: '', name: '', scores: {}, statuses: {} });
+export const newStudent = (id = newId()): Student => ({ id, studentId: '', name: '', scores: {}, statuses: {} });
 
 export interface ClassInfo {
   subjectCode: string;
@@ -21,6 +24,12 @@ export interface ClassInfo {
 /** Column key used by grid paste: a student field or a score column id. */
 export type CellKey = 'studentId' | 'name' | { columnId: string };
 
+/**
+ * An edit to one class. It runs on this tab's copy and again on the latest saved copy,
+ * so it must give the same ids both times: take new ids from `nid`, never crypto directly.
+ */
+type Edit = (c: ClassRecord, nid: () => string) => ClassRecord;
+
 interface State {
   loaded: boolean;
   noticeSeen: boolean;
@@ -28,6 +37,7 @@ interface State {
   activeClassId: string | null;
   view: View;
   drawer: { studentId: string; term: Term } | null;
+  saveStatus: SaveStatus;
 
   load(): Promise<void>;
   acceptNotice(): void;
@@ -39,6 +49,12 @@ interface State {
   deleteClass(id: string): void;
   /** Mastersoft student list (D34): into a new class, or merged into the active one. */
   importMastersoft(file: MastersoftFile, target: 'new' | 'active'): MergeResult;
+  /** Smart Excel import (D7): mapped scores into one term of the active class. */
+  importScores(term: Term, mapping: ImportMapping, rows: ImportedRow[]): MergeScoresResult;
+  /** Restore a backup (D9), replacing the class with the same id or as a separate copy. */
+  restoreClass(record: ClassRecord, mode: 'replace' | 'copy'): void;
+  /** Tries the changes that failed to save again. */
+  retrySave(): void;
 
   setCsMode(term: Term, mode: CsMode): void;
   saveColumn(term: Term, column: Column): void;
@@ -54,36 +70,63 @@ interface State {
   pasteBlock(startRow: number, keys: CellKey[], startKey: number, rows: string[][]): void;
 }
 
-const saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
-
-function scheduleSave(record: ClassRecord) {
-  clearTimeout(saveTimers.get(record.id));
-  saveTimers.set(
-    record.id,
-    setTimeout(() => {
-      saveTimers.delete(record.id);
-      void db.classes.put(record);
-    }, 300),
-  );
-}
+const ignore = () => {};
 
 export const useStore = create<State>()((set, get) => {
-  /** Applies `fn` to the active class and saves the result. */
-  const update = (fn: (c: ClassRecord) => ClassRecord) => {
-    const { classes, activeClassId } = get();
-    set({
-      classes: classes.map((c) => {
-        if (c.id !== activeClassId) return c;
-        const next = { ...fn(c), updatedAt: Date.now() };
-        scheduleSave(next);
-        return next;
-      }),
+  /** Classes changed in another tab while this tab still had changes to save. */
+  const staleFromOtherTabs = new Set<string>();
+
+  /** Replaces this tab's copies of these classes with the saved ones. */
+  const reload = async (ids: string[]) => {
+    const records = await db.classes.bulkGet(ids);
+    if (queue.busy) {
+      ids.forEach((id) => staleFromOtherTabs.add(id));
+      return;
+    }
+    let classes = get().classes;
+    ids.forEach((id, i) => {
+      const saved = records[i];
+      if (!saved) classes = classes.filter((c) => c.id !== id);
+      else if (classes.some((c) => c.id === id)) classes = classes.map((c) => (c.id === id ? saved : c));
+      else classes = [saved, ...classes];
     });
+    const activeClassId = classes.some((c) => c.id === get().activeClassId) ? get().activeClassId : (classes[0]?.id ?? null);
+    set({ classes, activeClassId });
+  };
+
+  const queue = new SaveQueue(classStorage, {
+    onStatus: (saveStatus) => set({ saveStatus }),
+    onSaved: (ids) => {
+      announceChanges(ids);
+      const all = [...new Set([...ids, ...staleFromOtherTabs])];
+      staleFromOtherTabs.clear();
+      void reload(all);
+    },
+  });
+
+  /** Applies an edit to the active class now, and queues it to be saved. */
+  const update = (edit: Edit) => {
+    const { classes, activeClassId } = get();
+    if (!activeClassId) return;
+    const ids: string[] = [];
+    const replayIds = () => {
+      let i = 0;
+      return () => {
+        if (ids[i] === undefined) ids[i] = newId();
+        return ids[i++]!;
+      };
+    };
+    const apply = (c: ClassRecord) => ({ ...edit(c, replayIds()), updatedAt: Date.now() });
+    set({ classes: classes.map((c) => (c.id === activeClassId ? apply(c) : c)) });
+    queue.enqueue({ classId: activeClassId, change: (latest) => latest && apply(latest) });
   };
   const updateTerm = (term: Term, fn: (t: TermSetup) => TermSetup) =>
     update((c) => ({ ...c, terms: { ...c.terms, [term]: fn(c.terms[term]) } }));
   const updateStudent = (id: string, fn: (s: Student) => Student) =>
     update((c) => ({ ...c, students: c.students.map((s) => (s.id === id ? fn(s) : s)) }));
+  /** Saves a whole record (new, restored) or deletes one. */
+  const saveWhole = (classId: string, record: ClassRecord | 'delete') => queue.enqueue({ classId, change: () => record });
+  const saveMeta = (key: string, value: unknown) => void setMeta(key, value).catch(ignore);
 
   return {
     loaded: false,
@@ -92,6 +135,7 @@ export const useStore = create<State>()((set, get) => {
     activeClassId: null,
     view: 'PRELIM',
     drawer: null,
+    saveStatus: { state: 'idle' },
 
     async load() {
       const [classes, noticeSeen, activeClassId] = await Promise.all([
@@ -101,16 +145,21 @@ export const useStore = create<State>()((set, get) => {
       ]);
       const active = classes.find((c) => c.id === activeClassId) ?? classes[0];
       set({ loaded: true, classes, noticeSeen: !!noticeSeen, activeClassId: active?.id ?? null });
+      onOtherTabChanges((ids) => void reload(ids));
+      // Warn before closing the tab while changes are unsaved.
+      window.addEventListener('beforeunload', (e) => {
+        if (queue.busy) e.preventDefault();
+      });
     },
     acceptNotice() {
       set({ noticeSeen: true });
-      void setMeta('noticeSeen', true);
+      saveMeta('noticeSeen', true);
     },
     setView: (view) => set({ view, drawer: null }),
     openDrawer: (drawer) => set({ drawer }),
     selectClass(id) {
       set({ activeClassId: id, drawer: null });
-      void setMeta('activeClassId', id);
+      saveMeta('activeClassId', id);
     },
     createClass(info) {
       const record: ClassRecord = {
@@ -121,38 +170,54 @@ export const useStore = create<State>()((set, get) => {
         updatedAt: Date.now(),
       };
       set({ classes: [record, ...get().classes], activeClassId: record.id, view: 'PRELIM', drawer: null });
-      void db.classes.put(record);
-      void setMeta('activeClassId', record.id);
+      saveWhole(record.id, record);
+      saveMeta('activeClassId', record.id);
     },
-    updateClassInfo: (info) => update((c) => ({ ...c, ...info })),
+    updateClassInfo: ({ subjectCode, subjectName, section, subjectType }) => update((c) => ({ ...c, subjectCode, subjectName, section, subjectType })),
     deleteClass(id) {
-      clearTimeout(saveTimers.get(id));
       const classes = get().classes.filter((c) => c.id !== id);
       const activeClassId = get().activeClassId === id ? (classes[0]?.id ?? null) : get().activeClassId;
       set({ classes, activeClassId, drawer: null });
-      void db.classes.delete(id);
-      if (activeClassId) void setMeta('activeClassId', activeClassId);
+      saveWhole(id, 'delete');
+      if (activeClassId) saveMeta('activeClassId', activeClassId);
     },
     importMastersoft(file, target) {
-      if (target === 'active' && get().activeClassId) {
-        let result!: MergeResult;
-        update((c) => {
-          result = mergeMastersoftRows(c.students, file.rows, newStudent);
-          return { ...c, students: result.students, mastersoftSession: file.session ?? c.mastersoftSession };
+      if (!(target === 'active' && get().activeClassId)) {
+        const first = file.rows[0]!;
+        get().createClass({
+          subjectCode: file.subjectCode ?? '',
+          subjectName: tidy(first.subject.replace(/\(\s*(lec|lab)\s*\)\s*$/i, '')),
+          section: tidy(first.section),
+          subjectType: subjectTypeFromSubject(first.subject) ?? 'LEC',
         });
-        return result;
       }
-      const first = file.rows[0]!;
-      get().createClass({
-        subjectCode: file.subjectCode ?? '',
-        subjectName: tidy(first.subject.replace(/\(\s*(lec|lab)\s*\)\s*$/i, '')),
-        section: tidy(first.section),
-        subjectType: subjectTypeFromSubject(first.subject) ?? 'LEC',
+      let result!: MergeResult;
+      update((c, nid) => {
+        result = mergeMastersoftRows(c.students, file.rows, () => newStudent(nid()));
+        return { ...c, students: result.students, mastersoftSession: file.session ?? c.mastersoftSession };
       });
-      const result = mergeMastersoftRows([], file.rows, newStudent);
-      update((c) => ({ ...c, students: result.students, mastersoftSession: file.session }));
       return result;
     },
+    importScores(term, mapping, rows) {
+      let result!: MergeScoresResult;
+      update((c, nid) => {
+        result = mergeImportedScores(c, term, mapping, rows, { student: () => newStudent(nid()), id: nid });
+        return result.record;
+      });
+      return result;
+    },
+    restoreClass(record, mode) {
+      const restored = mode === 'copy' ? { ...record, id: newId(), updatedAt: Date.now() } : { ...record, updatedAt: Date.now() };
+      set({
+        classes: [restored, ...get().classes.filter((c) => c.id !== restored.id)],
+        activeClassId: restored.id,
+        view: 'PRELIM',
+        drawer: null,
+      });
+      saveWhole(restored.id, restored);
+      saveMeta('activeClassId', restored.id);
+    },
+    retrySave: () => queue.retry(),
 
     setCsMode: (term, csMode) => updateTerm(term, (t) => ({ ...t, csMode })),
     saveColumn: (term, column) =>
@@ -162,19 +227,18 @@ export const useStore = create<State>()((set, get) => {
           ? t.columns.map((c) => (c.id === column.id ? column : c))
           : [...t.columns, column],
       })),
-    deleteColumn: (term, columnId) => {
-      updateTerm(term, (t) => ({ ...t, columns: t.columns.filter((c) => c.id !== columnId) }));
+    deleteColumn: (term, columnId) =>
       update((c) => ({
         ...c,
+        terms: { ...c.terms, [term]: { ...c.terms[term], columns: c.terms[term].columns.filter((col) => col.id !== columnId) } },
         students: c.students.map((s) => {
           const { [columnId]: _removed, ...scores } = s.scores;
           return { ...s, scores };
         }),
-      }));
-    },
+      })),
     setCategories: (term, categories) => updateTerm(term, (t) => ({ ...t, categories })),
 
-    addStudent: () => update((c) => ({ ...c, students: [...c.students, newStudent()] })),
+    addStudent: () => update((c, nid) => ({ ...c, students: [...c.students, newStudent(nid())] })),
     deleteStudent: (id) => update((c) => ({ ...c, students: c.students.filter((s) => s.id !== id) })),
     setStudentField: (id, field, value) => updateStudent(id, (s) => ({ ...s, [field]: value })),
     setScore: (id, columnId, value) => updateStudent(id, (s) => ({ ...s, scores: { ...s.scores, [columnId]: value } })),
@@ -188,12 +252,16 @@ export const useStore = create<State>()((set, get) => {
     setReverse: (id, reverse) => updateStudent(id, (s) => ({ ...s, reverse })),
 
     /** Pastes a block copied from Excel, adding students when it runs past the last row. */
-    pasteBlock: (startRow, keys, startKey, rows) =>
-      update((c) => {
+    pasteBlock(startRow, keys, startKey, rows) {
+      // Fix the target students now, by id, so the save lands on the same rows.
+      const current = get().classes.find((c) => c.id === get().activeClassId)?.students ?? [];
+      const targets = rows.map((_, r) => current[startRow + r]?.id);
+      update((c, nid) => {
         const students = [...c.students];
         rows.forEach((cells, r) => {
-          const i = startRow + r;
-          const student = { ...(students[i] ?? newStudent()) };
+          const id = targets[r];
+          const i = id === undefined ? -1 : students.findIndex((s) => s.id === id);
+          const student = { ...(i >= 0 ? students[i]! : newStudent(nid())) };
           student.scores = { ...student.scores };
           cells.forEach((value, k) => {
             const key = keys[startKey + k];
@@ -202,10 +270,12 @@ export const useStore = create<State>()((set, get) => {
             if (key === 'studentId' || key === 'name') student[key] = v;
             else student.scores[key.columnId] = v;
           });
-          students[i] = student;
+          if (i >= 0) students[i] = student;
+          else students.push(student);
         });
         return { ...c, students };
-      }),
+      });
+    },
   };
 });
 

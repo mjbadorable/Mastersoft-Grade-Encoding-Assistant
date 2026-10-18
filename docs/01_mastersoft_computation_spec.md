@@ -63,20 +63,20 @@ flowchart LR
 
 | Used for | Below 75 |
 |---|---|
-| **Term grades** (Prelim / Midterm / Final) | Internal scale **3.1–4.9** (sheet column "point grade") |
+| **Term grades** (Prelim / Midterm / Final) | Internal scale **3.1–3.9** for 68–74; **5.0** for 60–67 (D36) |
 | **Final Rating** (transcript) | Always **5.0** (sheet column "point grade (Transcript)") |
 
-**Term point grades below 75 (D31, D32).** Source: the sheet's `Transmutation Table` tab (read 2026-10-18), which lists point grades per percentage; values are taken at the first matching row, as the sheet's own `VLOOKUP` does, and rounded to 1 decimal as Mastersoft displays them. The app shows an amber **"unverified"** badge next to every unverified value.
+**Term point grades below 75 (D31, D32, D36).** Mastersoft gives **5.0** to any term grade whose point grade would be worse than 3.9 (term grades 60–67), confirmed by the user on 2026-10-18 (D36). For 68–74, source: the sheet's `Transmutation Table` tab (read 2026-10-18), which lists point grades per percentage; values are taken at the first matching row, as the sheet's own `VLOOKUP` does, and rounded to 1 decimal as Mastersoft displays them. The app shows an amber **"unverified"** badge next to every unverified value.
 
 | Term grade | 74 | 73 | 72 | 71 | 70 | 69 | 68 | 67 | 66 | 65 | 64 | 63 | 62 | 61 | 60 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| **Term point grade** | 3.1 | **3.2** | 3.4 | 3.6 | **3.7** | 3.8 | 3.9 | 4.1 | 4.2 | 4.3 | 4.5 | 4.6 | 4.7 | 4.9 | 5.0 |
-| Status | unverified | ✓ verified (EE 231) | unverified | unverified | ✓ verified (EE 231) | unverified | unverified | unverified | unverified | unverified | unverified | unverified | unverified | unverified | unverified |
+| **Term point grade** | 3.1 | **3.2** | 3.4 | 3.6 | **3.7** | 3.8 | 3.9 | **5.0** | **5.0** | **5.0** | **5.0** | **5.0** | **5.0** | **5.0** | **5.0** |
+| Status | unverified | ✓ verified (EE 231) | unverified | unverified | ✓ verified (EE 231) | unverified | unverified | ✓ (D36) | ✓ (D36) | ✓ (D36) | ✓ (D36) | ✓ (D36) | ✓ (D36) | ✓ (D36) | ✓ (D36) |
 
 Notes:
 - **73 always maps to 3.2.** The sheet also lists 3.3 for 73 (at 50–53%), but the EE 231 screenshot shows 3.2.
 - No term grade maps to **3.5** in the sheet.
-- For 60–69 the sheet's raw values are fractional (e.g. 3.933…, 4.067…); the table shows them rounded to 1 decimal.
+- For 68–69 the sheet's raw values are fractional (e.g. 3.933…); the table shows them rounded to 1 decimal. The sheet's 4.1–4.9 values for 60–67 are **not** used: Mastersoft shows 5.0 there (D36).
 - **Low risk:** term point grades are display-only. The Final Rating is computed from the transmuted term grades, and a Final Rating below 75 is always 5.0, so an unverified value here can't change a final grade.
 
 > [!NOTE]

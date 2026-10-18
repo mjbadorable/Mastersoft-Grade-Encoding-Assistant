@@ -28,7 +28,7 @@
 | Composite weightage (CS / WE) | 33.33 / 66.67 ✓ |
 | Term grade | `round(T[round(CS%)]·w_cs + T[round(WE%)]·w_we)` |
 | **Final Rating** | **20% Prelim + 30% Midterm + 50% Final** |
-| Point grade | Looked up from the transmuted grade. Below 75: **term grades** use the internal 3.1–4.9 scale (table in spec §2; only 70 and 73 are verified, the rest carry an "unverified" badge); the **Final Rating** is 5.0 |
+| Point grade | Looked up from the transmuted grade. Below 75: **term grades** use the internal 3.1–3.9 scale for 68–74 (table in spec §2; only 70 and 73 are verified, the rest carry an "unverified" badge) and **5.0 for 60–67** (D36); the **Final Rating** is 5.0 |
 | Rounding | Half-up, done in integer hundredths by `roundHalfUp` (never `Math.round` on a decimal). Scaled % is rounded to 2 decimals, then to a whole % |
 | Empty Total Marks | Not allowed. Mastersoft rejects it ("total marks value should be 100"), and the app will block it the same way. |
 
@@ -150,7 +150,7 @@ sequenceDiagram
 | `transmute(pct)` | Rounded % → transmuted grade |
 | `termGrade(cs, we, weights)` | Weighted sum, rounded |
 | `roundHalfUp(value)` | Half-up rounding on integer hundredths; every rounding step uses it |
-| `pointGrade(grade, scale)` | Transmuted grade → point grade, using the `term` table (3.1–4.9 below 75) or the `transcript` table (5.0 below 75) |
+| `pointGrade(grade, scale)` | Transmuted grade → point grade, using the `term` table (3.1–3.9 for 68–74, 5.0 for 60–67, D36) or the `transcript` table (5.0 below 75) |
 | `finalRating(p, m, f)` | 20/30/50 split |
 | `minFinalNeeded(p, m)` | Lowest Final term grade that still gives FR ≥ 75 (see D26 for the edge cases) |
 | `solveReverse(targetFR, totals)` | Finds the marks to encode for a target Final Rating (reverse mode) |
@@ -257,7 +257,7 @@ flowchart TB
 | State | **Zustand** | Lightweight, simple to learn |
 | Validation | **Zod** | Schema checks for imported data and inputs |
 | Excel import/export | **SheetJS (xlsx)**, installed from cdn.sheetjs.com (the npm `xlsx` package is outdated) | Reads teachers' existing `.xlsx` class records; Mastersoft builds its upload files with SheetJS too (D34) |
-| PDF export | **jsPDF + autoTable** (or browser print CSS) | Printable "encoding guide" |
+| PDF export | **Browser print CSS** (jsPDF + autoTable not needed, D35) | Printable "encoding guide"; "Save as PDF" from the print dialog |
 | Local persistence | **IndexedDB (via Dexie)** | Drafts survive a page refresh; stays on the device |
 | Testing | **Vitest** (engine) + **Playwright** (end-to-end) | Engine tests use the 12 verified real student rows as fixtures |
 | Hosting | **GitHub Pages / Firebase Hosting** | Free, static, HTTPS |
@@ -310,6 +310,8 @@ flowchart LR
 **Status (2026-10-18):** Phase 1 engine built in `src/engine/` (rules in `src/engine/rules/rules.v1.json`), with 96 passing tests in `tests/engine/` (`npm test`). Not yet covered: a raw-mark case from Mastersoft (see D33).
 
 **Status (2026-10-18, Phase 2):** gradebook UI built (`npm run dev`), plus the Mastersoft upload-file import and export (D34), brought forward from Phase 3. 119 tests pass. Phase 3 still has the general import from teachers' own Excel class records, the PDF Encoding Guide and backup/restore.
+
+**Status (2026-10-18, Phase 3):** smart Excel import with saved templates, printable/PDF and `.xlsx` Encoding Guide, and JSON backup/restore built (D35). 132 tests pass. Not yet done: Playwright end-to-end tests and the pilot.
 
 The phases are the **build order**. The **v1 release** (what teachers receive) is the result of **Phases 1–3** together (D22); nothing is released to teachers after Phase 2 alone, because the app isn't useful without import and the encoding guide.
 
@@ -391,6 +393,10 @@ The phases are the **build order**. The **v1 release** (what teachers receive) i
 | # | Topic | Decision |
 |---|---|---|
 | D34 | Mastersoft "Upload Grade Encoding" files | Mastersoft's template (Grade Encoding → Upload Grade Encoding → Download Template) is **one `.xlsx` per term per component** (6 per class), built with SheetJS: one sheet `Sheet1`, one header row, columns `Student Id, Student Name, Subject, Campus, Section, Semester, Marks`. The file name is `{Session}-{Subject code}-{Section}-{Term}-{Component}.xlsx` without spaces. The file has **no Total Marks** (Mastersoft's "Marks Out of" is set on the upload screen) and **no status column**. **Import:** the student list only, in the file's exact row order, with the text kept exactly (names keep Mastersoft's double and trailing spaces); a new class gets subject, section and Lecture/Lab from the file; an existing class is matched by Student ID and keeps typed scores; marks already in the file are not imported. **Export:** per term, a Class Standing file and a Written Exam file with the same rows, order, columns and naming; only `Marks` is filled, with the engine's CS/WE marks. Blocked until Mastersoft's "Marks Out of" (entered by the teacher) equals the app's Total Marks and every listed student has complete, valid scores. Students with a status get a **blank** mark (status set on the Grade Encoding screen); students added by hand are left out with a warning ✓ |
+| D35 | Phase 3 I/O | **Smart import:** pick a sheet, the header row, an optional "highest possible scores" (HPS) row, the name and ID columns, then tick the raw score columns, tag them CS or WE and set each max score. The app suggests all of these (HPS row, `/20` or `(20)` in headers, exam headers → WE; totals and computed grades are left unticked). Mappings are saved as named templates in this browser and found again by header text. Blank cells (amber) and text, negative or above-max scores (red) are highlighted and imported as-is so the grid keeps showing them; a max score of 0 blocks the import. Students are matched by Student ID, then by name (case, commas and periods ignored); columns with the same name and component are reused. **Encoding Guide:** per term, the Assessment Component totals and the student table in Mastersoft's order, statuses in place of values, problems and amber "unverified" notes in a Notes column; printed or saved as PDF with print CSS, and downloadable as `.xlsx`. **Backup:** one class per JSON file (`app`, `format: 1`, `exportedAt`, `classRecord`), checked on restore; a class already in the browser can be replaced or kept alongside the copy ✓ |
+| D36 | Term point grades worse than 3.9 | Mastersoft gives a term point grade of **5.0** to term grades **60–67** (whose sheet values were 4.1–4.9), confirmed by the user on 2026-10-18. These are now verified (no amber badge). 68–74 keep 3.1–3.9. Rules file version 1.1.0. Display-only: the Final Rating is computed from term grades, so no Final Rating changes ✓ |
+| D37 | Safe saving and duplicate IDs (USA requirements test, 2026-10-18) | Each edit is saved as a change re-applied to the latest saved class inside one IndexedDB transaction, so two open tabs can't overwrite each other; tabs reload a class when another tab saves it. The header confirms every save ("Saved" + time) and reports a failed save with Retry and a banner. Duplicate Student IDs (case and spaces ignored) are flagged, counted and block the Mastersoft export. Results: `docs/04_requirements_test_report.md` ✓ |
+| D38 | Name of reverse mode | Shown to teachers as **Final Rating Only mode** (sidebar: "Final Rating Only"), since only the Final Rating is encoded there (internship, thesis). Code and older decisions still call it reverse mode ✓ |
 
 ## 13. Deferred / Optional Future Items
 

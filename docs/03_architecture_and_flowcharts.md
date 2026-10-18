@@ -192,8 +192,8 @@ flowchart TD
   Term_Grade = roundHalfUp(Raw_Term)"]
   TERM_ROUND --> TERM_PG["Step 7: Lookup Term Point Grade (Term Table)
   Term_PG = TermPointGradeTable[Term_Grade]
-  (75–100 -> 3.0–1.0; 60–74 -> internal 3.1–5.0 scale;
-  only 70 and 73 verified, others get 'unverified' badge)"]
+  (75–100 -> 3.0–1.0; 68–74 -> internal 3.1–3.9 scale, only 70 and 73 verified;
+  60–67 -> 5.0, verified (D36))"]
 
   %% Final Rating across 3 terms
   TERM_PG --> ANY_STATUS{"Status in Any Term?"}
@@ -235,7 +235,7 @@ flowchart TB
       • Midterm Gradebook (30%)
       • Final Gradebook (50%)
       • Final Rating Summary
-      • Reverse Calculator Mode
+      • Final Rating Only Mode
       • Transmutation Table Reference"]
 
       subgraph Content["Right Main Content Area"]
