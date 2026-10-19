@@ -8,6 +8,7 @@ import { ClassDialog } from './components/ClassDialog';
 import { ConfirmHost } from './components/ConfirmDialog';
 import { MastersoftImportDialog } from './components/MastersoftDialogs';
 import { FinalRatingSummary } from './components/FinalRatingSummary';
+import { OfflineIndicator } from './components/OfflineStatus';
 import { PrivacyNotice } from './components/PrivacyNotice';
 import { ReverseMode } from './components/ReverseMode';
 import { SaveErrorBanner, SaveIndicator } from './components/SaveStatus';
@@ -73,6 +74,7 @@ export function App() {
           </span>
         )}
         <span className="ml-auto" />
+        <OfflineIndicator />
         <SaveIndicator />
         <span className="rounded bg-white/15 px-2 py-0.5 text-xs" title="Version of the Mastersoft rules file">
           Rules v{rules.version}

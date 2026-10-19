@@ -2,7 +2,7 @@
 // All students here are made up.
 import { describe, expect, it } from 'vitest';
 import * as XLSX from 'xlsx';
-import { BackupError, parseBackup, serializeBackup } from '../../src/app/backup';
+import { BackupError, backupFingerprint, parseBackup, serializeBackup } from '../../src/app/backup';
 import { buildGuide, guideCells, guideWorkbook, mastersoftOrder } from '../../src/app/encodingGuide';
 import { applyMapping, fromTemplate, mergeImportedScores, readWorkbook, suggestMapping, toTemplate, type Grid } from '../../src/app/excelImport';
 import { termOutcome } from '../../src/app/gradebook';
@@ -183,5 +183,17 @@ describe('backup and restore', () => {
     const bad = JSON.parse(serializeBackup(record([]))) as { classRecord: { students: unknown[] } };
     bad.classRecord.students.push({ id: 'x', studentId: '', name: 'X', scores: { a: 5 }, statuses: {} });
     expect(() => parseBackup(JSON.stringify(bad))).toThrow(/score is invalid/);
+  });
+
+  it('fingerprints the class content, so "Not backed up" ignores save times', () => {
+    const g = grid();
+    const m = suggestMapping(g);
+    const r = mergeImportedScores(record([]), 'PRELIM', m, applyMapping(g, m).rows, make).record;
+    const restored = parseBackup(serializeBackup(r)).classRecord;
+    expect(backupFingerprint({ ...r, updatedAt: 123 })).toBe(backupFingerprint({ ...r, updatedAt: 456 }));
+    expect(backupFingerprint(restored)).toBe(backupFingerprint(r));
+    const s0 = r.students[0]!;
+    const edited = { ...r, students: [{ ...s0, scores: { ...s0.scores, [r.terms.PRELIM.columns[0]!.id]: '1' } }, ...r.students.slice(1)] };
+    expect(backupFingerprint(edited)).not.toBe(backupFingerprint(r));
   });
 });

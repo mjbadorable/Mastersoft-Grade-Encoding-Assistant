@@ -1,6 +1,6 @@
 import { ArchiveRestore, Download } from 'lucide-react';
-import { useRef, useState, type ChangeEvent } from 'react';
-import { BackupError, backupFileName, parseBackup, serializeBackup, type BackupFile } from '../app/backup';
+import { useMemo, useRef, useState, type ChangeEvent } from 'react';
+import { BackupError, backupFileName, backupFingerprint, parseBackup, serializeBackup, type BackupFile } from '../app/backup';
 import { useActiveClass, useStore } from '../app/store';
 import { downloadFile } from '../lib/download';
 import { Button } from './ui/button';
@@ -9,8 +9,11 @@ import { Dialog, DialogContent } from './ui/dialog';
 /** Header buttons: download the open class as a JSON backup, or restore one (D9). */
 export function BackupRestore() {
   const active = useActiveClass();
-  const { classes, restoreClass } = useStore();
+  const { classes, restoreClass, backedUp, markBackedUp } = useStore();
   const input = useRef<HTMLInputElement>(null);
+  // The open class has students and changed since its last backup (or was never backed up).
+  const fingerprint = useMemo(() => (active ? backupFingerprint(active) : null), [active]);
+  const needsBackup = !!active && active.students.length > 0 && backedUp[active.id] !== fingerprint;
   const [pending, setPending] = useState<BackupFile | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -38,12 +41,21 @@ export function BackupRestore() {
   return (
     <>
       <button
-        onClick={() => active && downloadFile(serializeBackup(active), backupFileName(active), 'application/json')}
+        onClick={() => {
+          if (!active) return;
+          downloadFile(serializeBackup(active), backupFileName(active), 'application/json');
+          markBackedUp(active);
+        }}
         disabled={!active}
         className="flex items-center gap-1 text-xs text-white/85 hover:text-white disabled:opacity-50"
-        title="Download the open class as a backup file"
+        title={
+          needsBackup
+            ? 'This class changed since its last backup. Download a backup file: it is your only copy outside this browser.'
+            : 'Download the open class as a backup file'
+        }
       >
         <Download className="size-4" /> Backup
+        {needsBackup && <span className="rounded bg-amber-300 px-1.5 py-px text-[10px] font-semibold text-amber-950">Not backed up</span>}
       </button>
       <button onClick={() => input.current?.click()} className="flex items-center gap-1 text-xs text-white/85 hover:text-white" title="Restore a class from a backup file">
         <ArchiveRestore className="size-4" /> Restore

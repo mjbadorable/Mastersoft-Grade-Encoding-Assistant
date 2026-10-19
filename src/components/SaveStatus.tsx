@@ -33,7 +33,14 @@ export function SaveIndicator() {
 
 /** Full-width warning under the header while changes are not saved. */
 export function SaveErrorBanner() {
-  const { saveStatus, retrySave } = useStore();
+  const { saveStatus, retrySave, storageError } = useStore();
+  if (storageError)
+    return (
+      <div className="flex items-center gap-3 border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800" role="alert">
+        <AlertTriangle className="size-4 shrink-0" />
+        <span>{storageError}</span>
+      </div>
+    );
   if (saveStatus.state !== 'error') return null;
   return (
     <div className="flex items-center gap-3 border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800" role="alert">

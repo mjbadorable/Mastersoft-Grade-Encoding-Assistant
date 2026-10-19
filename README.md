@@ -273,6 +273,15 @@ Each release: `npm run deploy` (in Windows PowerShell, use `npm.cmd run deploy` 
 
 Saved classes belong to the address they were made on: classes made on `localhost` do not appear on the hosted site. Move them with **Backup** and **Restore**.
 
+### Offline use and updates
+
+The build writes a service worker (`dist/sw.js`, from [src/sw.js](src/sw.js) by the `offline` plugin in [vite.config.ts](vite.config.ts)). After one online visit, the app opens and reloads without internet. Saving, imports, exports, backup and restore all run in the browser.
+
+- **Updates:** a new release downloads in the background. Teachers see **Update ready · Reload** and switch when they choose; an open tab never changes files halfway through encoding. Saved classes are not touched by updates.
+- **A bad release:** deploy a fixed one (or `npx firebase-tools@15 hosting:rollback`). Teachers get it through **Update ready**, or the next time they open the app after closing all of its tabs.
+- **Storage limits:** classes live in this browser's IndexedDB. The app asks the browser to keep them (`navigator.storage.persist()`), but the browser decides, and new or rarely used sites are often refused. Clearing browser data, private windows, another browser or another computer all mean the classes are not there. The Data Privacy Notice shows the browser's answer, and the header shows **Not backed up** when the open class changed since its last backup file.
+- The service worker only runs in `npm run build` / `npm run preview` output, not in `npm run dev`.
+
 ## Accuracy and testing
 
 - The engine is tested against real Mastersoft results (GE 6, EE 231a, EE 231 grade reports) and the MLS Internship sheet, with student names replaced by IDs.
