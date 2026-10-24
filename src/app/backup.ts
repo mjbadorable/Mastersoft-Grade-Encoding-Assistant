@@ -19,6 +19,17 @@ export function serializeBackup(record: ClassRecord, now = new Date()): string {
   return JSON.stringify(file, null, 2);
 }
 
+/**
+ * Identifies a class's content (not when it was saved), so the app can tell whether it
+ * changed since the teacher's last backup. FNV-1a over the record without `updatedAt`.
+ */
+export function backupFingerprint(record: ClassRecord): string {
+  const text = JSON.stringify({ ...record, updatedAt: 0 });
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 0x01000193);
+  return `${(h >>> 0).toString(16)}-${text.length}`;
+}
+
 export function backupFileName(record: ClassRecord, now = new Date()): string {
   const name = [record.subjectCode, record.section, 'backup', now.toISOString().slice(0, 10)].filter(Boolean).join(' ');
   return `${name.replace(/[\\/:*?"<>|]+/g, '-')}.json`;

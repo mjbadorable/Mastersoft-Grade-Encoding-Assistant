@@ -1,0 +1,11 @@
+{
+  "name": "Mastersoft Grade Encoding Assistant",
+  "short_name": "Grade Encoding",
+  "description": "Preview your Mastersoft grades before you encode. Works offline; data stays in this browser.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#a90504",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

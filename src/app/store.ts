@@ -3,11 +3,15 @@
 // it to the latest saved record so open tabs never overwrite each other (TC-028).
 import { create } from 'zustand';
 import type { ObeConfig, Status, SubjectType, Term } from '../engine';
-import { announceChanges, classStorage, db, getMeta, onOtherTabChanges, setMeta } from './db';
+import { backupFingerprint } from './backup';
+import { announceChanges, classStorage, db, getMeta, keepStorage, onOtherTabChanges, setMeta, storagePersisted } from './db';
 import { mergeImportedScores, type ImportedRow, type ImportMapping, type MergeScoresResult } from './excelImport';
 import { mergeMastersoftRows, subjectTypeFromSubject, tidy, type MastersoftFile, type MergeResult } from './mastersoftFile';
 import { SaveQueue, type SaveStatus } from './saveQueue';
 import type { Category, ClassRecord, Column, CsMode, ReverseInput, Student, TermSetup, View } from './types';
+
+/** Bump when the Data Privacy Notice changes, so every teacher sees the new text once. */
+const NOTICE_VERSION = 2;
 
 const newId = (): string => crypto.randomUUID();
 const emptyTerm = (): TermSetup => ({ csMode: 'RAW_SUM', categories: [], columns: [] });
@@ -38,9 +42,17 @@ interface State {
   view: View;
   drawer: { studentId: string; term: Term } | null;
   saveStatus: SaveStatus;
+  /** Set when this browser's storage could not be opened: nothing can be saved. */
+  storageError: string | null;
+  /** The browser's answer to "keep this app's data" (null: not asked yet or not supported). */
+  storageKept: boolean | null;
+  /** Content fingerprint of each class at its last backup (see backupFingerprint). */
+  backedUp: Record<string, string>;
 
   load(): Promise<void>;
   acceptNotice(): void;
+  /** Remembers that this class, as it is now, has been backed up. */
+  markBackedUp(record: ClassRecord): void;
   setView(view: View): void;
   openDrawer(drawer: State['drawer']): void;
   selectClass(id: string): void;
@@ -98,6 +110,7 @@ export const useStore = create<State>()((set, get) => {
   const queue = new SaveQueue(classStorage, {
     onStatus: (saveStatus) => set({ saveStatus }),
     onSaved: (ids) => {
+      void keepStorage().then((storageKept) => set({ storageKept }));
       announceChanges(ids);
       const all = [...new Set([...ids, ...staleFromOtherTabs])];
       staleFromOtherTabs.clear();
@@ -137,15 +150,39 @@ export const useStore = create<State>()((set, get) => {
     view: 'PRELIM',
     drawer: null,
     saveStatus: { state: 'idle' },
+    storageError: null,
+    storageKept: null,
+    backedUp: {},
 
     async load() {
-      const [classes, noticeSeen, activeClassId] = await Promise.all([
-        db.classes.orderBy('updatedAt').reverse().toArray(),
-        getMeta<boolean>('noticeSeen'),
-        getMeta<string>('activeClassId'),
-      ]);
-      const active = classes.find((c) => c.id === activeClassId) ?? classes[0];
-      set({ loaded: true, classes, noticeSeen: !!noticeSeen, activeClassId: active?.id ?? null });
+      try {
+        const [classes, noticeSeen, activeClassId, backedUp] = await Promise.all([
+          db.classes.orderBy('updatedAt').reverse().toArray(),
+          getMeta<boolean | number>('noticeSeen'),
+          getMeta<string>('activeClassId'),
+          getMeta<Record<string, string>>('backedUp'),
+        ]);
+        const active = classes.find((c) => c.id === activeClassId) ?? classes[0];
+        set({
+          loaded: true,
+          classes,
+          // Older versions stored `true`; the notice changed (offline use, backups), so they see it once more.
+          noticeSeen: noticeSeen === NOTICE_VERSION,
+          activeClassId: active?.id ?? null,
+          backedUp: backedUp ?? {},
+          storageKept: await storagePersisted(),
+        });
+        if (classes.length > 0) void keepStorage().then((storageKept) => set({ storageKept }));
+      } catch (e) {
+        // Private windows or blocked site data: the app still computes, but can't save.
+        console.error('Opening IndexedDB failed', e);
+        set({
+          loaded: true,
+          storageError:
+            "This browser isn't letting the app save data (a private window or blocked site data can cause this). You can still compute grades, but nothing will be kept after you close this tab, so download a backup before closing.",
+        });
+        return;
+      }
       onOtherTabChanges((ids) => void reload(ids));
       // Warn before closing the tab while changes are unsaved.
       window.addEventListener('beforeunload', (e) => {
@@ -154,7 +191,12 @@ export const useStore = create<State>()((set, get) => {
     },
     acceptNotice() {
       set({ noticeSeen: true });
-      saveMeta('noticeSeen', true);
+      saveMeta('noticeSeen', NOTICE_VERSION);
+    },
+    markBackedUp(record) {
+      const backedUp = { ...get().backedUp, [record.id]: backupFingerprint(record) };
+      set({ backedUp });
+      saveMeta('backedUp', backedUp);
     },
     setView: (view) => set({ view, drawer: null }),
     openDrawer: (drawer) => set({ drawer }),
@@ -217,6 +259,8 @@ export const useStore = create<State>()((set, get) => {
       });
       saveWhole(restored.id, restored);
       saveMeta('activeClassId', restored.id);
+      // Replaced from a backup file: that file already holds exactly this class.
+      if (mode === 'replace') get().markBackedUp(restored);
     },
     retrySave: () => queue.retry(),
 
