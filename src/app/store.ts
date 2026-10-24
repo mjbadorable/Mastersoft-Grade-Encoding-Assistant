@@ -2,7 +2,7 @@
 // Every change to a class is saved to IndexedDB through the save queue, which re-applies
 // it to the latest saved record so open tabs never overwrite each other (TC-028).
 import { create } from 'zustand';
-import type { Status, SubjectType, Term } from '../engine';
+import type { ObeConfig, Status, SubjectType, Term } from '../engine';
 import { announceChanges, classStorage, db, getMeta, onOtherTabChanges, setMeta } from './db';
 import { mergeImportedScores, type ImportedRow, type ImportMapping, type MergeScoresResult } from './excelImport';
 import { mergeMastersoftRows, subjectTypeFromSubject, tidy, type MastersoftFile, type MergeResult } from './mastersoftFile';
@@ -60,6 +60,7 @@ interface State {
   saveColumn(term: Term, column: Column): void;
   deleteColumn(term: Term, columnId: string): void;
   setCategories(term: Term, categories: Category[]): void;
+  setObeConfig(obe: ObeConfig): void;
 
   addStudent(): void;
   deleteStudent(id: string): void;
@@ -237,6 +238,7 @@ export const useStore = create<State>()((set, get) => {
         }),
       })),
     setCategories: (term, categories) => updateTerm(term, (t) => ({ ...t, categories })),
+    setObeConfig: (obe) => update((c) => ({ ...c, obe })),
 
     addStudent: () => update((c, nid) => ({ ...c, students: [...c.students, newStudent(nid())] })),
     deleteStudent: (id) => update((c) => ({ ...c, students: c.students.filter((s) => s.id !== id) })),

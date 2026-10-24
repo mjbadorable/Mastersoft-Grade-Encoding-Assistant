@@ -1,5 +1,5 @@
 // Class record data model (blueprint §6). Stored as-is in IndexedDB.
-import type { Status, SubjectType, Term } from '../engine';
+import type { ObeConfig, Status, SubjectType, Term } from '../engine';
 
 export type CsMode = 'RAW_SUM' | 'WEIGHTED_CATEGORIES';
 export type Component = 'CS' | 'WE';
@@ -17,6 +17,11 @@ export interface Column {
   component: Component;
   /** Only used in WEIGHTED_CATEGORIES mode (D25). */
   categoryId?: string;
+  /** OBE tags: course outcome and learning outcome ids from `ClassRecord.obe`. */
+  coIds?: string[];
+  loIds?: string[];
+  /** Share of the column's points per CO id; missing means an equal split. */
+  coWeights?: Record<string, number>;
 }
 
 export interface TermSetup {
@@ -68,7 +73,9 @@ export interface ClassRecord {
   students: Student[];
   /** Academic session as written in Mastersoft's file names, e.g. "1stSem,2024-2025" (D34). */
   mastersoftSession?: string;
+  /** Syllabus outcomes for OBE attainment; unset until the teacher sets them up. */
+  obe?: ObeConfig;
   updatedAt: number;
 }
 
-export type View = Term | 'SUMMARY' | 'REVERSE' | 'TABLE';
+export type View = Term | 'SUMMARY' | 'OBE' | 'REVERSE' | 'TABLE';

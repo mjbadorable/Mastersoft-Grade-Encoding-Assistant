@@ -1,4 +1,5 @@
 export * from './compute';
+export * from './obe';
 export * from './reverse';
 export * from './status';
 export * from './weightedCategories';

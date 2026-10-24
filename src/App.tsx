@@ -60,6 +60,8 @@ export function App() {
     );
   else if (view === 'SUMMARY') content = <FinalRatingSummary record={active} />;
   else if (view === 'REVERSE') content = <ReverseMode record={active} />;
+  // The OBE dashboard comes in docs/06 Prompt B; nothing links to this view yet.
+  else if (view === 'OBE') content = <p className="p-6 text-sm text-slate-500">OBE Attainment is coming soon.</p>;
   else content = <TermGradebook key={`${active.id}-${view}`} record={active} term={view} />;
 
   return (
@@ -69,7 +71,7 @@ export function App() {
         {active && (
           <span className="truncate text-sm text-white/85">
             {active.subjectCode} {active.subjectName && `– ${active.subjectName}`} {active.section && `· ${active.section}`}
-            {view !== 'TABLE' && view !== 'SUMMARY' && view !== 'REVERSE' && ` · ${TERM_LABEL[view]}`}
+            {view !== 'TABLE' && view !== 'SUMMARY' && view !== 'REVERSE' && view !== 'OBE' && ` ·${TERM_LABEL[view]}`}
           </span>
         )}
         <span className="ml-auto" />
