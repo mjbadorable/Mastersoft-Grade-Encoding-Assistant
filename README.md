@@ -55,7 +55,7 @@ It also imports the student list from Mastersoft's upload template and exports *
 
 ## System architecture
 
-Everything is a static, client-side web app. There is no server and no login.
+Everything is a static, client-side web app. There is no server and no login. For the layers, storage schema and data flows, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ```mermaid
 flowchart TB
