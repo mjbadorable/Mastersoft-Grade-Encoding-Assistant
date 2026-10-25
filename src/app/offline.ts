@@ -34,7 +34,8 @@ export function registerOffline() {
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (reloading) window.location.reload();
   });
-  window.addEventListener('load', async () => {
+  window.addEventListener('load', () => void setUp());
+  async function setUp() {
     try {
       const reg = await navigator.serviceWorker.register('./sw.js');
       // A worker that finishes installing while another one controls this tab is an update.
@@ -58,5 +59,5 @@ export function registerOffline() {
       // The app still works online; it just won't open without internet.
       console.error('Offline support could not be set up', e);
     }
-  });
+  }
 }

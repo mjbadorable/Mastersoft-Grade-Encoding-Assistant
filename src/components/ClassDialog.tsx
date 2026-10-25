@@ -80,7 +80,7 @@ function ClassForm({ record, onDone }: { record?: ClassRecord; onDone: () => voi
       </Label>
       <div className="mt-2 flex items-center justify-between">
         {record ? (
-          <Button variant="ghost" className="text-red-600 hover:bg-red-50" onClick={remove}>
+          <Button variant="ghost" className="text-red-600 hover:bg-red-50" onClick={() => void remove()}>
             Delete class
           </Button>
         ) : (

@@ -148,7 +148,7 @@ function ColumnForm({ term, setup, column, onClose, hasScores, defaultComponent,
       </fieldset>
       <div className="mt-2 flex items-center justify-between">
         {existing ? (
-          <Button variant="ghost" className="text-red-600 hover:bg-red-50" onClick={remove}>
+          <Button variant="ghost" className="text-red-600 hover:bg-red-50" onClick={() => void remove()}>
             <Trash2 /> Delete column
           </Button>
         ) : (

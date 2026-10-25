@@ -60,7 +60,7 @@ export function BackupRestore() {
       <button onClick={() => input.current?.click()} className="flex items-center gap-1 text-xs text-white/85 hover:text-white" title="Restore a class from a backup file">
         <ArchiveRestore className="size-4" /> Restore
       </button>
-      <input ref={input} type="file" accept=".json,application/json" className="sr-only" onChange={choose} aria-label="Backup file to restore" />
+      <input ref={input} type="file" accept=".json,application/json" className="sr-only" onChange={(e) => void choose(e)} aria-label="Backup file to restore" />
 
       <Dialog open={!!pending || !!error} onOpenChange={(o) => !o && (setPending(null), setError(null))}>
         <DialogContent title="Restore a backup" description="Backups are JSON files downloaded from this app.">

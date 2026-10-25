@@ -34,6 +34,7 @@ export type CellKey = 'studentId' | 'name' | { columnId: string };
  */
 type Edit = (c: ClassRecord, nid: () => string) => ClassRecord;
 
+// Actions are typed as properties, not methods: they are closures and never use `this`.
 interface State {
   loaded: boolean;
   noticeSeen: boolean;
@@ -49,38 +50,38 @@ interface State {
   /** Content fingerprint of each class at its last backup (see backupFingerprint). */
   backedUp: Record<string, string>;
 
-  load(): Promise<void>;
-  acceptNotice(): void;
+  load: () => Promise<void>;
+  acceptNotice: () => void;
   /** Remembers that this class, as it is now, has been backed up. */
-  markBackedUp(record: ClassRecord): void;
-  setView(view: View): void;
-  openDrawer(drawer: State['drawer']): void;
-  selectClass(id: string): void;
-  createClass(info: ClassInfo): void;
-  updateClassInfo(info: ClassInfo): void;
-  deleteClass(id: string): void;
+  markBackedUp: (record: ClassRecord) => void;
+  setView: (view: View) => void;
+  openDrawer: (drawer: State['drawer']) => void;
+  selectClass: (id: string) => void;
+  createClass: (info: ClassInfo) => void;
+  updateClassInfo: (info: ClassInfo) => void;
+  deleteClass: (id: string) => void;
   /** Mastersoft student list (D34): into a new class, or merged into the active one. */
-  importMastersoft(file: MastersoftFile, target: 'new' | 'active'): MergeResult;
+  importMastersoft: (file: MastersoftFile, target: 'new' | 'active') => MergeResult;
   /** Smart Excel import (D7): mapped scores into one term of the active class. */
-  importScores(term: Term, mapping: ImportMapping, rows: ImportedRow[]): MergeScoresResult;
+  importScores: (term: Term, mapping: ImportMapping, rows: ImportedRow[]) => MergeScoresResult;
   /** Restore a backup (D9), replacing the class with the same id or as a separate copy. */
-  restoreClass(record: ClassRecord, mode: 'replace' | 'copy'): void;
+  restoreClass: (record: ClassRecord, mode: 'replace' | 'copy') => void;
   /** Tries the changes that failed to save again. */
-  retrySave(): void;
+  retrySave: () => void;
 
-  setCsMode(term: Term, mode: CsMode): void;
-  saveColumn(term: Term, column: Column): void;
-  deleteColumn(term: Term, columnId: string): void;
-  setCategories(term: Term, categories: Category[]): void;
-  setObeConfig(obe: ObeConfig): void;
+  setCsMode: (term: Term, mode: CsMode) => void;
+  saveColumn: (term: Term, column: Column) => void;
+  deleteColumn: (term: Term, columnId: string) => void;
+  setCategories: (term: Term, categories: Category[]) => void;
+  setObeConfig: (obe: ObeConfig) => void;
 
-  addStudent(): void;
-  deleteStudent(id: string): void;
-  setStudentField(id: string, field: 'studentId' | 'name', value: string): void;
-  setScore(id: string, columnId: string, value: string): void;
-  setStatus(id: string, term: Term, status: Status | undefined): void;
-  setReverse(id: string, reverse: ReverseInput | undefined): void;
-  pasteBlock(startRow: number, keys: CellKey[], startKey: number, rows: string[][]): void;
+  addStudent: () => void;
+  deleteStudent: (id: string) => void;
+  setStudentField: (id: string, field: 'studentId' | 'name', value: string) => void;
+  setScore: (id: string, columnId: string, value: string) => void;
+  setStatus: (id: string, term: Term, status: Status | undefined) => void;
+  setReverse: (id: string, reverse: ReverseInput | undefined) => void;
+  pasteBlock: (startRow: number, keys: CellKey[], startKey: number, rows: string[][]) => void;
 }
 
 const ignore = () => {};

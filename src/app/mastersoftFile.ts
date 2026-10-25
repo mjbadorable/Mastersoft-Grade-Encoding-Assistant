@@ -25,7 +25,9 @@ export interface MastersoftFile {
   hasMarks: boolean;
 }
 
-const text = (v: unknown) => (v === null || v === undefined ? '' : String(v));
+/** A raw SheetJS cell value (raw: true, defval: null). */
+type Cell = string | number | boolean | Date | null;
+const text = (v: Cell | undefined) => (v === null || v === undefined ? '' : String(v));
 const noSpaces = (s: string) => s.replace(/\s+/g, '');
 
 /** Display form of a Mastersoft name or ID: single spaces, trimmed. */
@@ -40,7 +42,7 @@ export function parseMastersoftFile(data: ArrayBuffer | Uint8Array, fileName: st
   }
   const ws = wb.Sheets[wb.SheetNames[0] ?? ''];
   if (!ws) throw new MastersoftFileError('The workbook has no sheets.');
-  const grid = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, raw: true, defval: null, blankrows: false });
+  const grid = XLSX.utils.sheet_to_json<Cell[]>(ws, { header: 1, raw: true, defval: null, blankrows: false });
 
   const header = (grid[0] ?? []).map((h) => tidy(text(h)).toLowerCase());
   const expected = MASTERSOFT_HEADERS.map((h) => h.toLowerCase());

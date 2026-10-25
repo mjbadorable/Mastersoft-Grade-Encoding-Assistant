@@ -93,7 +93,7 @@ function ImportForm({ onDone }: { onDone: () => void }) {
         <FileSpreadsheet className="size-6 text-slate-400" />
         <span className="font-medium text-slate-700">{file ? file.name : 'Choose a Mastersoft .xlsx file'}</span>
         <span className="text-xs text-slate-500">The file is read in this browser only. Nothing is uploaded.</span>
-        <input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="sr-only" onChange={choose} />
+        <input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="sr-only" onChange={(e) => void choose(e)} />
       </label>
 
       {error && (

@@ -21,14 +21,15 @@ function memoryStorage(initial: ClassRecord[]) {
   const rows = new Map(initial.map((r) => [r.id, structuredClone(r)]));
   let failNext = 0;
   const storage: SaveStorage = {
-    async apply({ classId, change }: SaveItem) {
+    apply({ classId, change }: SaveItem) {
       if (failNext > 0) {
         failNext--;
-        throw new Error('disk full');
+        return Promise.reject(new Error('disk full'));
       }
       const next = change(rows.get(classId));
       if (next === 'delete') rows.delete(classId);
       else if (next) rows.set(classId, structuredClone(next));
+      return Promise.resolve();
     },
   };
   return { storage, rows, failTimes: (n: number) => (failNext = n) };

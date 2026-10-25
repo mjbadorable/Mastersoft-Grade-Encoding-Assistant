@@ -235,7 +235,7 @@ export function mergeImportedScores(
     const i = columns.findIndex((c) => c.component === m.component && tidy(c.label).toLowerCase() === m.header.toLowerCase());
     if (i >= 0) {
       columns[i] = { ...columns[i]!, maxScore: m.maxScore };
-      return columns[i]!.id;
+      return columns[i].id;
     }
     const column: Column = { id: make.id(), label: m.header, maxScore: m.maxScore, component: m.component };
     columns.push(column);

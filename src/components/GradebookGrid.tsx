@@ -254,17 +254,19 @@ export function GradebookGrid({ record, term, onEditColumn, onAddColumn, onAddSt
                     )}
                   </span>
                   <button
-                    onClick={async () => {
-                      const hasData = student.name || student.studentId || Object.values(student.scores).some((v) => v.trim());
-                      const ok =
-                        !hasData ||
-                        (await confirmAction({
-                          title: 'Remove student?',
-                          message: `${student.name || 'This student'} and their scores in every term will be removed from the class.`,
-                          confirmLabel: 'Remove student',
-                        }));
-                      if (ok) deleteStudent(student.id);
-                    }}
+                    onClick={() =>
+                      void (async () => {
+                        const hasData = student.name || student.studentId || Object.values(student.scores).some((v) => v.trim());
+                        const ok =
+                          !hasData ||
+                          (await confirmAction({
+                            title: 'Remove student?',
+                            message: `${student.name || 'This student'} and their scores in every term will be removed from the class.`,
+                            confirmLabel: 'Remove student',
+                          }));
+                        if (ok) deleteStudent(student.id);
+                      })()
+                    }
                     className="hidden w-full justify-center text-slate-400 hover:text-red-600 group-hover:flex"
                     aria-label={`Remove ${student.name || `row ${row + 1}`}`}
                   >

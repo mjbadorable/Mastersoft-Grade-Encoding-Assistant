@@ -135,7 +135,7 @@ describe('export round trip', () => {
     const ws = wb.Sheets.Sheet1!;
     expect(wb.SheetNames).toEqual(['Sheet1']);
     expect(ws.A2).toMatchObject({ t: 's', v: 'S01' });
-    expect(ws.G2?.t).toBe('n');
+    expect(ws.G2).toMatchObject({ t: 'n' });
   });
 
   it('leaves Marks blank for a student with a status and lists them', () => {

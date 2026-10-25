@@ -143,7 +143,7 @@ function ImportFlow({ term, onDone }: { term: Term; onDone: () => void }) {
       <label className="flex cursor-pointer items-center gap-3 rounded-md border-2 border-dashed border-slate-300 px-4 py-3 hover:border-brand hover:bg-brand/5">
         <FileSpreadsheet className="size-5 text-slate-400" />
         <span className="font-medium text-slate-700">{book ? book.name : 'Choose your class record (.xlsx, .xls or .csv)'}</span>
-        <input type="file" accept=".xlsx,.xls,.xlsm,.csv" className="sr-only" onChange={choose} />
+        <input type="file" accept=".xlsx,.xls,.xlsm,.csv" className="sr-only" onChange={(e) => void choose(e)} />
       </label>
       {error && (
         <p className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-red-700">
