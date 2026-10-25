@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   computeObe,
-  OBE_PRESETS,
+  OBE_DEFAULT_CONFIG,
   OBE_SCOPES,
   type ObeScope,
   poRollup,
@@ -193,36 +193,32 @@ describe('vpaaSheet — VPAA CO Attainment formula', () => {
   });
 
   it('counts an LO linked to several COs under each of them', () => {
-    const { config: hm5 } = OBE_PRESETS.HM5_HOSPITALITY;
-    const sheet = vpaaSheet(hm5, [{ id: 'a', finalGrade: 75 }]);
-    expect(sheet.weights.map((w) => w.loCount)).toEqual([36, 36, 36]);
+    const all = ['co1', 'co2', 'co3'];
+    const linkedToAll: ObeConfig = {
+      pos: [],
+      cos: [co(1, []), co(2, []), co(3, [])],
+      los: [
+        { id: 'l1', code: 'LO 1.1', moduleCode: 'M1', term: 'PRELIM', coIds: all, description: '' },
+        { id: 'l2', code: 'LO 1.2', moduleCode: 'M1', term: 'PRELIM', coIds: all, description: '' },
+      ],
+    };
+    const sheet = vpaaSheet(linkedToAll, [{ id: 'a', finalGrade: 75 }]);
+    expect(sheet.weights.map((w) => w.loCount)).toEqual([2, 2, 2]);
     expect(Object.values(sheet.students[0]!.contributions!)).toEqual([25, 25, 25]);
   });
 });
 
-describe('OBE_PRESETS', () => {
-  it.each(Object.entries(OBE_PRESETS))('%s links only to outcomes it defines', (_key, { config: preset }) => {
-    const coIds = new Set(preset.cos.map((c) => c.id));
-    const poCodes = new Set(preset.pos.map((p) => p.code));
-    expect(new Set(preset.los.map((l) => l.id)).size).toBe(preset.los.length);
-    expect(new Set(preset.los.map((l) => l.code)).size).toBe(preset.los.length);
-    for (const l of preset.los) {
-      expect(l.coIds.length).toBeGreaterThan(0);
-      l.coIds.forEach((id) => expect(coIds.has(id)).toBe(true));
-    }
-    for (const c of preset.cos) c.poCodes.forEach((code) => expect(poCodes.has(code)).toBe(true));
-  });
-
-  it('follows the syllabi outline', () => {
-    const { DEFAULT_3CO, HM5_HOSPITALITY, CPE122_DISCRETE_MATH } = OBE_PRESETS;
-    expect(DEFAULT_3CO.config.cos.map((c) => c.code)).toEqual(['CO1', 'CO2', 'CO3']);
-    expect(DEFAULT_3CO.config.pos.map((p) => p.code)).toEqual(['A', 'B', 'C', 'D', 'E']);
-    expect(HM5_HOSPITALITY.config.pos.map((p) => p.code)).toEqual(['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']);
-    expect(HM5_HOSPITALITY.config.los).toHaveLength(36);
-    expect(new Set(HM5_HOSPITALITY.config.los.map((l) => l.moduleCode))).toEqual(new Set(['M1', 'M2', 'M3', 'M4', 'M5', 'M6']));
-    expect(CPE122_DISCRETE_MATH.config.cos.map((c) => c.code)).toEqual(['CO1', 'CO2', 'CO3', 'CO4']);
-    expect(CPE122_DISCRETE_MATH.config.pos.map((p) => p.code)).toEqual(['a', 'm']);
-    expect(new Set(CPE122_DISCRETE_MATH.config.los.map((l) => l.moduleCode)).size).toBe(8);
+describe('OBE_DEFAULT_CONFIG', () => {
+  it('is a blank CO1–CO3 setup that links only to outcomes it defines', () => {
+    const d = OBE_DEFAULT_CONFIG;
+    expect(d.cos.map((c) => c.code)).toEqual(['CO1', 'CO2', 'CO3']);
+    expect(d.pos.map((p) => p.code)).toEqual(['A', 'B', 'C', 'D', 'E']);
+    expect([...d.pos, ...d.cos, ...d.los].every((o) => o.description === '')).toBe(true);
+    expect(d.programName).toBeUndefined();
+    const coIds = new Set(d.cos.map((c) => c.id));
+    const poCodes = new Set(d.pos.map((p) => p.code));
+    for (const l of d.los) l.coIds.forEach((id) => expect(coIds.has(id)).toBe(true));
+    for (const c of d.cos) c.poCodes.forEach((code) => expect(poCodes.has(code)).toBe(true));
   });
 });
 

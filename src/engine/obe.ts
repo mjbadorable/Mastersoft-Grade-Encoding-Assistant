@@ -427,182 +427,36 @@ export function poRollup(config: ObeConfig, classCos: ClassOutcomeSummary[]): Po
   });
 }
 
-// ---- Syllabus presets ----
+// ---- Blank default setup ----
 
-const co = (n: number, description: string, agaCodes: AgaCode[], poCodes: string[]): CourseOutcome => ({
+const co = (n: number, poCodes: string[]): CourseOutcome => ({
   id: `co${n}`,
   code: `CO${n}`,
-  description,
-  agaCodes,
+  description: '',
+  agaCodes: [],
   poCodes,
   passRawPct: OBE_PASS_RAW_PCT,
   targetClassPct: OBE_TARGET_CLASS_PCT,
 });
-const po = (code: string, description: string): ProgramOutcome => ({ id: `po-${code}`, code, description });
-const lo = (code: string, moduleCode: string, term: Term, coIds: string[], description: string): LearningOutcome => ({
-  id: `lo-${code.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-$/, '')}`,
+const lo = (code: string, moduleCode: string, term: Term, coId: string): LearningOutcome => ({
+  id: `lo-${code.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
   code,
   moduleCode,
   term,
-  coIds,
-  description,
+  coIds: [coId],
+  description: '',
 });
 
-const HM5_COS = ['co1', 'co2', 'co3'];
-const hm5 = (code: string, moduleCode: string, term: Term, description: string) => lo(code, moduleCode, term, HM5_COS, description);
-
-/** CpE 122 numbers LOs per module (LO1, LO2, ...), so codes carry the module: "M1-LO1". */
-const cpe = (moduleCode: string, term: Term, coIds: string[], descriptions: string[]) =>
-  descriptions.map((d, i) => lo(`${moduleCode}-LO${i + 1}`, moduleCode, term, coIds, d));
-
-export type ObePresetKey = 'DEFAULT_3CO' | 'HM5_HOSPITALITY' | 'CPE122_DISCRETE_MATH';
-
-export const OBE_PRESETS: Record<ObePresetKey, { name: string; config: ObeConfig }> = {
-  DEFAULT_3CO: {
-    name: 'Default CO1–CO3',
-    config: {
-      pos: ['A', 'B', 'C', 'D', 'E'].map((c) => po(c, '')),
-      cos: [co(1, '', [], ['A', 'B']), co(2, '', [], ['C', 'D']), co(3, '', [], ['E'])],
-      los: [
-        lo('LO 1.1', 'M1', 'PRELIM', ['co1'], ''),
-        lo('LO 1.2', 'M1', 'PRELIM', ['co1'], ''),
-        lo('LO 2.1', 'M2', 'MIDTERM', ['co2'], ''),
-        lo('LO 2.2', 'M2', 'MIDTERM', ['co2'], ''),
-        lo('LO 3.1', 'M3', 'FINAL', ['co3'], ''),
-        lo('LO 3.2', 'M3', 'FINAL', ['co3'], ''),
-      ],
-    },
-  },
-  // HM 5 / HM 5A Applied Business Tools & Technologies in Hospitality, 1st Sem AY 2025-2026.
-  // Every module in the syllabus links to CO1, CO2 and CO3.
-  HM5_HOSPITALITY: {
-    name: 'HM5 Hospitality',
-    config: {
-      programName: 'Bachelor of Science in Hospitality Management',
-      collegeName: 'College of Business',
-      pos: [
-        po('A', 'Demonstrate knowledge of tourism industry, local tourism products and services'),
-        po('B', 'Interpret and apply relevant laws related to tourism industry'),
-        po('C', 'Observe and perform risk mitigation activities'),
-        po('D', 'Utilize information technology applications for tourism and hospitality'),
-        po('E', 'Manage and market a service-oriented business organization'),
-        po('F', 'Demonstrate administrative and managerial skills in a service-oriented business organization'),
-        po('G', 'Prepare and monitor industry specific financial transactions and reports'),
-        po('H', 'Perform human capital development functions of a tourism oriented organization'),
-      ],
-      cos: [
-        co(1, 'Apply technological tools and systems relevant to the hospitality industry', ['B', 'C'], ['A', 'D', 'E']),
-        co(2, 'Produce hospitality-related documents and reports using digital tools, adhering to professional formats, and ethical practices', ['A', 'B', 'C'], ['B', 'D', 'G']),
-        co(3, 'Evaluate the integration of current technological innovations', ['A', 'B', 'C'], ['C', 'F', 'H']),
-      ],
-      los: [
-        hm5('LO 1.1', 'M1', 'PRELIM', 'Examine how technology enhances tourism operations and the functions of front office systems.'),
-        hm5('LO 1.2', 'M1', 'PRELIM', 'Analyze the effectiveness of various productivity tools in improving hospitality-related tasks and processes.'),
-        hm5('LO 1.3', 'M1', 'PRELIM', 'Critique different platforms for their role in enhancing processes and guest relations in hospitality.'),
-        hm5('LO 1.4', 'M1', 'PRELIM', 'Demonstrate the use of basic front office and reservation system tools in simulated tourism scenarios.'),
-        hm5('LO 1.5', 'M1', 'PRELIM', 'Apply productivity software to complete tourism management tasks.'),
-        hm5('LO 1.6', 'M1', 'PRELIM', 'Utilize selected digital communication tools to simulate real-world tourism communication.'),
-        hm5('LO 2.1', 'M2', 'PRELIM', 'Examine the role of automation in streamlining hospitality operations and enhancing customer service.'),
-        hm5('LO 2.2', 'M2', 'PRELIM', "Critique the effectiveness of automated booking and scheduling platforms in the hospitality industry's service delivery."),
-        hm5('LO 2.3', 'M2', 'PRELIM', 'Defend the use of automated email systems as a strategic communication solution in hospitality industry operations.'),
-        // The syllabus numbers the first lab LO of M2 "LO 2.3" as well.
-        hm5('LO 2.3 (Lab)', 'M2', 'PRELIM', 'Simulate a basic automated workflow for a common hospitality business task using online tools.'),
-        hm5('LO 2.4', 'M2', 'PRELIM', 'Construct a sample booking or scheduling process using an automation platform.'),
-        hm5('LO 2.5', 'M2', 'PRELIM', 'Design a basic automated email campaign for a hospitality service using online tools.'),
-        hm5('LO 3.1', 'M3', 'MIDTERM', 'Examine the components and structure of effective hotel proposals tailored to various client needs.'),
-        hm5('LO 3.2', 'M3', 'MIDTERM', 'Evaluate different promotional strategies and their effectiveness in attracting target markets in hospitality industry.'),
-        hm5('LO 3.3', 'M3', 'MIDTERM', 'Assess how websites enhance the visibility, accessibility, and credibility of tourism businesses.'),
-        hm5('LO 3.4', 'M3', 'MIDTERM', 'Design a customized hotel proposal using digital tools, ensuring accuracy and professional formatting.'),
-        hm5('LO 3.5', 'M3', 'MIDTERM', 'Create promotional materials using digital platforms to support a hotel campaign.'),
-        hm5('LO 3.6', 'M3', 'MIDTERM', 'Develop a basic, content-rich hotel website using a web-based platform, integrating multimedia and contact elements.'),
-        hm5('LO 4.1', 'M4', 'MIDTERM', 'Explain and examine how GDS works and how it helps hospitality companies connect with customers.'),
-        hm5('LO 4.2', 'M4', 'MIDTERM', 'Describe the interface and basic commands used in GDS.'),
-        hm5('LO 4.3', 'M4', 'MIDTERM', 'Analyze the structure of GDS commands for Flight Availability and PNR.'),
-        hm5('LO 4.4', 'M4', 'MIDTERM', 'Identify GDS platforms used in tourism and describe their basic functions.'),
-        hm5('LO 4.5', 'M4', 'MIDTERM', 'Use basic GDS commands to search for flights and information.'),
-        hm5('LO 4.6', 'M4', 'MIDTERM', 'Create a PNR and check flight availability using GDS commands.'),
-        hm5('LO 5.1', 'M5', 'FINAL', 'Compare different ways to change bookings.'),
-        hm5('LO 5.2', 'M5', 'FINAL', 'Judge why adding special requests or details to a booking matters for good service.'),
-        hm5('LO 5.3', 'M5', 'FINAL', 'Examine how GDS displays prices and what factors affect fare changes.'),
-        hm5('LO 5.4', 'M5', 'FINAL', 'Perform booking changes correctly using GDS.'),
-        hm5('LO 5.5', 'M5', 'FINAL', 'Use GDS to add requests and find bookings.'),
-        hm5('LO 5.6', 'M5', 'FINAL', 'Check fares using GDS commands.'),
-        hm5('LO 6.1', 'M6', 'FINAL', 'Examine the role of emerging technology systems in enhancing customer experiences.'),
-        hm5('LO 6.2', 'M6', 'FINAL', 'Analyze how software reshapes hospitality business processes and customer management.'),
-        hm5('LO 6.3', 'M6', 'FINAL', 'Evaluate the effectiveness of smart hospitality and sustainability technologies in promoting responsible hospitality management.'),
-        hm5('LO 6.4', 'M6', 'FINAL', 'Demonstrate how to operate or simulate the use of emerging hospitality technologies through available digital tools or platforms.'),
-        hm5('LO 6.5', 'M6', 'FINAL', 'Apply digital systems to simulated hospitality operational scenarios.'),
-        hm5('LO 6.6', 'M6', 'FINAL', 'Create a proposal using digital tools that demonstrates the application of smart or sustainable hospitality technologies.'),
-      ],
-    },
-  },
-  // CpE 122 Discrete Mathematics, 2nd Sem AY 2023-2024. All COs link to POs a and m.
-  CPE122_DISCRETE_MATH: {
-    name: 'CpE122 Discrete Math',
-    config: {
-      programName: 'Bachelor of Science in Computer Engineering',
-      collegeName: 'College of Technology',
-      pos: [
-        po('a', 'Apply knowledge of mathematics and sciences to solve computer engineering problems'),
-        po('m', 'Understand at least one specialized field of computer engineering practice'),
-      ],
-      cos: [
-        co(1, 'Demonstrate knowledge of the basic concepts of discrete mathematics', [], ['a', 'm']),
-        co(2, 'Solve problems in discrete math fundamental topics', [], ['a', 'm']),
-        co(3, 'Use logic and proofs techniques to prove theorems and problems', [], ['a', 'm']),
-        co(4, 'Use counting techniques, trees and graphs theory to solve problems', [], ['a', 'm']),
-      ],
-      los: [
-        ...cpe('M1', 'PRELIM', ['co1', 'co2'], [
-          'Solve problems on sets',
-          'Solve problems on computer representation of sets',
-          'Solve problems on functions',
-          'Solve problems on sequences and sums',
-        ]),
-        ...cpe('M2', 'PRELIM', ['co1', 'co2', 'co3'], [
-          'Identify the principles of logic',
-          'Solve problems on propositional equivalence',
-          'Solve problems on predicate and quantifiers',
-          'Prove the rule of inference problems',
-          'Use proof techniques to solve problems',
-        ]),
-        ...cpe('M3', 'PRELIM', ['co1', 'co2'], [
-          'Solve problems on growth of function',
-          'Identify the notation for complexity of algorithms',
-          'Solve problems on integers and division',
-          'Solve problems on integers and algorithms',
-          'Solve problems on number theory',
-          'Solve problems on matrices',
-        ]),
-        ...cpe('M4', 'MIDTERM', ['co1', 'co4'], [
-          'Solve problems on counting',
-          'Solve problems on pigeon principles',
-          'Solve problems on permutations and combinations',
-        ]),
-        ...cpe('M5', 'MIDTERM', ['co1', 'co2'], [
-          'Identify properties of relations',
-          'Identify the application of relations',
-          'Solve problems on relations',
-          'Solve problems on cryptography',
-        ]),
-        ...cpe('M6', 'MIDTERM', ['co1', 'co4'], [
-          'Identify types of graphs and its models',
-          'Familiarize graph terminology and special graphs',
-          'Solve problems on graphs representation and isomorphism',
-          'Solve problems on graphs connectivity',
-          'Solve problems on paths and circuits',
-          'Solve problems on shortest path',
-        ]),
-        ...cpe('M7', 'FINAL', ['co1', 'co4'], [
-          'Describe concept of trees',
-          'Solve problems on application of trees',
-          'Solve problems on tree traversals',
-          'Solve problems on spanning trees',
-          'Solve problems on minimum spanning trees',
-          'Solve problems on networks',
-        ]),
-        ...cpe('M8', 'FINAL', ['co1', 'co2'], ['Solve problems on Boolean algebra', 'Solve problems on finite state machines']),
-      ],
-    },
-  },
+/** A blank CO1–CO3 setup (one module per term) for classes without a syllabus to upload. */
+export const OBE_DEFAULT_CONFIG: ObeConfig = {
+  pos: ['A', 'B', 'C', 'D', 'E'].map((code) => ({ id: `po-${code}`, code, description: '' })),
+  cos: [co(1, ['A', 'B']), co(2, ['C', 'D']), co(3, ['E'])],
+  los: [
+    lo('LO 1.1', 'M1', 'PRELIM', 'co1'),
+    lo('LO 1.2', 'M1', 'PRELIM', 'co1'),
+    lo('LO 2.1', 'M2', 'MIDTERM', 'co2'),
+    lo('LO 2.2', 'M2', 'MIDTERM', 'co2'),
+    lo('LO 3.1', 'M3', 'FINAL', 'co3'),
+    lo('LO 3.2', 'M3', 'FINAL', 'co3'),
+  ],
 };

@@ -2,7 +2,7 @@ import { Plus, Trash2 } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { useStore } from '../app/store';
 import type { Category, Column, Component, TermSetup } from '../app/types';
-import { OBE_PRESETS, sumMarks, type ObeConfig, type Term } from '../engine';
+import { OBE_DEFAULT_CONFIG, sumMarks, type ObeConfig, type Term } from '../engine';
 import { cn } from '../lib/utils';
 import { confirmAction } from './ConfirmDialog';
 import { Button } from './ui/button';
@@ -140,7 +140,7 @@ function ColumnForm({ term, setup, column, onClose, hasScores, defaultComponent,
         ) : (
           <div className="flex items-center justify-between gap-2 rounded-md border border-dashed border-slate-300 px-3 py-2 text-xs text-slate-500">
             No course outcomes set up for this class yet.
-            <Button size="sm" variant="outline" onClick={() => setObeConfig(OBE_PRESETS.DEFAULT_3CO.config)}>
+            <Button size="sm" variant="outline" onClick={() => setObeConfig(OBE_DEFAULT_CONFIG)}>
               Initialize CO1–CO3
             </Button>
           </div>

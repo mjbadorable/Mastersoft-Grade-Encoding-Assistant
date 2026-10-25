@@ -6,8 +6,8 @@ import { useStore } from '../app/store';
 import { obeConfigFromExtraction, readSyllabusFile, SYLLABUS_FILE_TYPES } from '../app/syllabusReader';
 import type { ClassRecord } from '../app/types';
 import {
+  OBE_DEFAULT_CONFIG,
   OBE_PASS_RAW_PCT,
-  OBE_PRESETS,
   OBE_SCOPES,
   OBE_TARGET_CLASS_PCT,
   poRollup,
@@ -15,7 +15,6 @@ import {
   type AgaCode,
   type ClassOutcomeSummary,
   type ObeConfig,
-  type ObePresetKey,
   type ObeReport,
   type ObeScope,
 } from '../engine';
@@ -389,19 +388,18 @@ function SetupTab({ obe }: { obe: ObeConfig | undefined }) {
   const config = obe ?? EMPTY;
   const save = (patch: Partial<ObeConfig>) => setObeConfig({ ...config, ...patch });
 
-  const loadPreset = async (key: ObePresetKey) => {
-    const preset = OBE_PRESETS[key];
+  const startBlank = async () => {
     if (
       obe &&
       !(await confirmAction({
-        title: `Load ${preset.name}?`,
-        message: "This replaces the class's COs, LOs and POs. Column tags that point to outcomes not in the preset will stop counting.",
-        confirmLabel: 'Load preset',
+        title: 'Start from a blank setup?',
+        message: "This replaces the class's COs, LOs and POs with a blank CO1–CO3 setup. Column tags that point to outcomes not in it will stop counting.",
+        confirmLabel: 'Start blank',
       }))
     ) {
       return;
     }
-    setObeConfig(preset.config);
+    setObeConfig(OBE_DEFAULT_CONFIG);
   };
 
   const renamePo = (id: string, code: string) => {
@@ -416,12 +414,10 @@ function SetupTab({ obe }: { obe: ObeConfig | undefined }) {
     <div className="grid gap-6 p-4">
       <SyllabusReader obe={obe} />
       <section className="flex flex-wrap items-center gap-2">
-        <span className="text-xs font-medium text-slate-600">Or load a syllabus preset:</span>
-        {(Object.keys(OBE_PRESETS) as ObePresetKey[]).map((k) => (
-          <Button key={k} size="sm" variant="outline" onClick={() => void loadPreset(k)}>
-            {OBE_PRESETS[k].name}
-          </Button>
-        ))}
+        <span className="text-xs font-medium text-slate-600">No syllabus PDF?</span>
+        <Button size="sm" variant="outline" onClick={() => void startBlank()}>
+          Start from a blank CO1–CO3 setup
+        </Button>
       </section>
 
       <section className="grid max-w-3xl grid-cols-2 gap-3">

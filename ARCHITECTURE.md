@@ -68,7 +68,8 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-  A[Syllabus PDF or preset] --> B["syllabusReader.ts (pdf.js, in the browser)"]
+  A[Syllabus PDF] --> B["syllabusReader.ts (pdf.js, in the browser)"]
+  A2[Blank CO1–CO3 setup] --> C
   B --> C["store.ts: setObeConfig → record.obe"]
   D[Column dialog: CO / LO tags] --> E["store.ts: saveColumn"]
   C --> F["app/obe.ts: obeReport, vpaaForRecord"]
@@ -77,7 +78,7 @@ flowchart LR
   G --> H["ObeDashboard, BreakdownDrawer, VPAA .xlsx"]
 ```
 
-- **User action:** the teacher uploads the course syllabus (or picks a preset), checks the POs/COs/LOs, and tags gradebook columns with the COs and LOs they assess.
+- **User action:** the teacher uploads the course syllabus (or starts from the blank CO1–CO3 setup, `OBE_DEFAULT_CONFIG`), checks the POs/COs/LOs, and tags gradebook columns with the COs and LOs they assess.
 - **Component:** `ObeDashboard` (setup tab) and `ColumnDialogs` call `setObeConfig` and `saveColumn`; both are saved through Flow 1.
 - **Service:** `src/app/obe.ts` hands the record to `src/engine/obe.ts`: `computeObe` (direct CO/LO attainment per student, per term and overall), `vpaaSheet` (VPAA CO Attainment: LO-count weight × Final Rating) and `poRollup` (class CO attainment rolled up to POs). The OBE engine only **reads** the gradebook; it never changes a grade.
 - **State update:** results are computed on render (memoised in `ObeDashboard`) and can be exported as the VPAA workbook; nothing computed is stored.
