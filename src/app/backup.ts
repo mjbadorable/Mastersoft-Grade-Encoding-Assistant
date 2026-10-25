@@ -1,5 +1,6 @@
 // Backup and restore (D9): one class record as a JSON file the teacher keeps.
 import { STATUSES } from './labels';
+import { normalizeClassObe } from './obe';
 import type { ClassRecord } from './types';
 
 const APP = 'mastersoft-grade-encoding';
@@ -38,7 +39,7 @@ export function backupFileName(record: ClassRecord, now = new Date()): string {
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isStr = (v: unknown): v is string => typeof v === 'string';
 
-/** Reads a backup file and checks its shape, so a wrong or damaged file can't load. */
+/** Reads a backup file and checks its shape, so a wrong or damaged file can't load (OBE data is repaired). */
 export function parseBackup(text: string): BackupFile {
   let data: unknown;
   try {
@@ -73,5 +74,7 @@ export function parseBackup(text: string): BackupFile {
     if (!Object.values(st.scores).every(isStr)) fail('a score is invalid');
     if (!Object.values(st.statuses).every((v) => STATUSES.includes(v as never))) fail('a status is invalid');
   }
-  return data as unknown as BackupFile;
+  // Older backups may lack OBE fields or links: repair them rather than reject the class.
+  const file = data as unknown as BackupFile;
+  return { ...file, classRecord: normalizeClassObe(file.classRecord) };
 }

@@ -6,6 +6,7 @@ import { BackupError, backupFingerprint, parseBackup, serializeBackup } from '..
 import { buildGuide, guideCells, guideWorkbook, mastersoftOrder } from '../../src/app/encodingGuide';
 import { applyMapping, fromTemplate, mergeImportedScores, readWorkbook, suggestMapping, toTemplate, type Grid } from '../../src/app/excelImport';
 import { termOutcome } from '../../src/app/gradebook';
+import { obeReport, vpaaForRecord } from '../../src/app/obe';
 import type { ClassRecord, Student, TermSetup } from '../../src/app/types';
 
 const xlsx = (sheets: Record<string, unknown[][]>) => {
@@ -183,6 +184,15 @@ describe('backup and restore', () => {
     const bad = JSON.parse(serializeBackup(record([]))) as { classRecord: { students: unknown[] } };
     bad.classRecord.students.push({ id: 'x', studentId: '', name: 'X', scores: { a: 5 }, statuses: {} });
     expect(() => parseBackup(JSON.stringify(bad))).toThrow(/score is invalid/);
+  });
+
+  it('repairs the OBE setup of an older or damaged backup, so the OBE views still open', () => {
+    const file = JSON.parse(serializeBackup(record([]))) as { classRecord: Record<string, unknown> };
+    file.classRecord.obe = { cos: [{ id: 'co1', code: 'CO1' }], los: [{ id: 'l1', code: 'LO 1.1', term: 'PRELIM' }] };
+    const restored = parseBackup(JSON.stringify(file)).classRecord;
+    expect(restored.obe!.los[0]!.coIds).toEqual([]);
+    expect(() => obeReport(restored)).not.toThrow();
+    expect(() => vpaaForRecord(restored, restored.obe!)).not.toThrow();
   });
 
   it('fingerprints the class content, so "Not backed up" ignores save times', () => {

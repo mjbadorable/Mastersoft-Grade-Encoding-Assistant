@@ -28,6 +28,8 @@ Dexie database `mastersoft-grade-encoding` (`src/app/db.ts`), **version 1**:
 
 `ClassRecord` (`src/app/types.ts`): `id`, subject code/name, section, `subjectType`, `terms` (`PRELIM`/`MIDTERM`/`FINAL` → `csMode`, `categories`, `columns` with `maxScore`, `component` CS/WE and optional OBE tags `coIds`/`loIds`, and `coWeights` — custom CO splits, which no screen edits yet: the column dialog keeps them when they come from a restored backup), `students` (scores stored **as typed text** by column id, statuses per term, optional reverse-mode target and Mastersoft row), optional `obe` config (POs, COs, LOs), `updatedAt`.
 
+**Saved OBE data is repaired on the way in.** Records loaded from IndexedDB (`store.ts` `load` / `reload`) and restored backups (`backup.ts` `parseBackup`) pass through `normalizeClassObe` (`src/app/obe.ts`): missing outcome lists become empty, missing or invalid pass marks and targets use the defaults (60% / 75%), LO links to COs that no longer exist are dropped, and malformed column tags are removed. Older backups therefore restore instead of breaking the OBE views.
+
 **Computed grades are never stored.** Every grade and OBE figure is recomputed from the record when shown, so a rules change or a fix can never leave stale results behind.
 
 ## Data flows

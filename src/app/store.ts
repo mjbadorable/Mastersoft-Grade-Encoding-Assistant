@@ -7,6 +7,7 @@ import { backupFingerprint } from './backup';
 import { announceChanges, classStorage, db, getMeta, keepStorage, onOtherTabChanges, setMeta, storagePersisted } from './db';
 import { mergeImportedScores, type ImportedRow, type ImportMapping, type MergeScoresResult } from './excelImport';
 import { mergeMastersoftRows, subjectTypeFromSubject, tidy, type MastersoftFile, type MergeResult } from './mastersoftFile';
+import { normalizeClassObe } from './obe';
 import { SaveQueue, type SaveStatus } from './saveQueue';
 import type { Category, ClassRecord, Column, CsMode, ReverseInput, Student, TermSetup, View } from './types';
 
@@ -99,7 +100,7 @@ export const useStore = create<State>()((set, get) => {
     }
     let classes = get().classes;
     ids.forEach((id, i) => {
-      const saved = records[i];
+      const saved = records[i] && normalizeClassObe(records[i]);
       if (!saved) classes = classes.filter((c) => c.id !== id);
       else if (classes.some((c) => c.id === id)) classes = classes.map((c) => (c.id === id ? saved : c));
       else classes = [saved, ...classes];
@@ -158,7 +159,8 @@ export const useStore = create<State>()((set, get) => {
     async load() {
       try {
         const [classes, noticeSeen, activeClassId, backedUp] = await Promise.all([
-          db.classes.orderBy('updatedAt').reverse().toArray(),
+          // Records saved by older versions may lack OBE fields: repaired on load (see normalizeClassObe).
+          db.classes.orderBy('updatedAt').reverse().toArray().then((rows) => rows.map(normalizeClassObe)),
           getMeta<boolean | number>('noticeSeen'),
           getMeta<string>('activeClassId'),
           getMeta<Record<string, string>>('backedUp'),

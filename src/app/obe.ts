@@ -1,10 +1,87 @@
 // OBE views of a class record (docs/06 Prompt B): the engine report, the VPAA sheet from
 // each student's Final Rating, and the VPAA "CO Attainment" / "PO Attainment" workbook.
 import * as XLSX from 'xlsx';
-import { computeObe, poRollup, vpaaSheet, type ObeConfig, type ObeReport, type VpaaSheet } from '../engine';
+import {
+  computeObe,
+  OBE_PASS_RAW_PCT,
+  OBE_TARGET_CLASS_PCT,
+  poRollup,
+  TERMS,
+  vpaaSheet,
+  type AgaCode,
+  type CourseOutcome,
+  type LearningOutcome,
+  type ObeConfig,
+  type ObeReport,
+  type ProgramOutcome,
+  type VpaaSheet,
+} from '../engine';
 import { finalOutcome } from './gradebook';
 import { TERM_LABEL } from './labels';
 import type { ClassRecord, Column } from './types';
+
+// ---- Reading saved OBE data safely ----
+// Backups and records saved by older versions may lack fields or links. These checks give the
+// engine and the OBE views a well-formed setup, so a damaged file can never crash them.
+
+const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+const str = (v: unknown) => (typeof v === 'string' ? v : '');
+const strings = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
+const pctOr = (v: unknown, fallback: number) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 100 ? v : fallback);
+/** The array's objects that have a string id (an outcome without one can't be linked to). */
+const withIds = (v: unknown) => (Array.isArray(v) ? v.filter(isObj).filter((o) => typeof o.id === 'string' && o.id !== '') : []);
+
+/**
+ * A saved OBE setup made well-formed: missing lists are empty, missing or invalid pass marks and
+ * targets use the defaults, and links to COs that don't exist are dropped. Undefined when there
+ * is no readable setup (the class then shows "set up your outcomes").
+ */
+export function normalizeObeConfig(raw: unknown): ObeConfig | undefined {
+  if (!isObj(raw)) return undefined;
+  const pos: ProgramOutcome[] = withIds(raw.pos).map((p) => ({ id: p.id as string, code: str(p.code), description: str(p.description) }));
+  const cos: CourseOutcome[] = withIds(raw.cos).map((c) => ({
+    id: c.id as string,
+    code: str(c.code),
+    description: str(c.description),
+    agaCodes: strings(c.agaCodes).filter((a): a is AgaCode => a === 'A' || a === 'B' || a === 'C'),
+    poCodes: strings(c.poCodes),
+    passRawPct: pctOr(c.passRawPct, OBE_PASS_RAW_PCT),
+    targetClassPct: pctOr(c.targetClassPct, OBE_TARGET_CLASS_PCT),
+  }));
+  const coIds = new Set(cos.map((c) => c.id));
+  const los: LearningOutcome[] = withIds(raw.los).map((l) => ({
+    id: l.id as string,
+    code: str(l.code),
+    moduleCode: str(l.moduleCode),
+    term: TERMS.find((t) => t === l.term) ?? 'PRELIM',
+    coIds: strings(l.coIds).filter((id) => coIds.has(id)),
+    description: str(l.description),
+  }));
+  const config: ObeConfig = { pos, cos, los };
+  for (const key of ['programName', 'collegeName', 'syllabusFileName'] as const) if (typeof raw[key] === 'string') config[key] = raw[key];
+  if (typeof raw.syllabusUploadedAt === 'number') config.syllabusUploadedAt = raw.syllabusUploadedAt;
+  return config;
+}
+
+/** A column's OBE tags kept only when they are lists of ids (and CO weights only as numbers). */
+function normalizeColumnTags(col: Column): Column {
+  const { coIds, loIds, coWeights, ...rest } = col as Column & Record<'coIds' | 'loIds' | 'coWeights', unknown>;
+  const next: Column = rest;
+  if (Array.isArray(coIds)) next.coIds = strings(coIds);
+  if (Array.isArray(loIds)) next.loIds = strings(loIds);
+  if (isObj(coWeights)) next.coWeights = Object.fromEntries(Object.entries(coWeights).filter((e): e is [string, number] => typeof e[1] === 'number'));
+  return next;
+}
+
+/** The class record with its OBE setup and column tags made well-formed (see `normalizeObeConfig`). */
+export function normalizeClassObe(record: ClassRecord): ClassRecord {
+  const { obe: rawObe, ...rest } = record;
+  const obe = normalizeObeConfig(rawObe);
+  const terms = Object.fromEntries(
+    TERMS.map((t) => [t, { ...record.terms[t], columns: record.terms[t].columns.map(normalizeColumnTags) }]),
+  ) as ClassRecord['terms'];
+  return obe ? { ...rest, terms, obe } : { ...rest, terms };
+}
 
 /** Direct CO/LO attainment for the class, or null before the syllabus outcomes are set up. */
 export function obeReport(record: ClassRecord): ObeReport | null {

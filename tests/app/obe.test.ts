@@ -1,8 +1,8 @@
 // OBE views of a class record: Final Rating → VPAA sheet, column tags, and the VPAA workbook.
 import * as XLSX from 'xlsx';
 import { describe, expect, it } from 'vitest';
-import { columnTags, nextOutcomeCode, obeReport, vpaaFileName, vpaaForRecord, vpaaWorkbook } from '../../src/app/obe';
-import type { ClassRecord, Student, TermSetup } from '../../src/app/types';
+import { columnTags, nextOutcomeCode, normalizeClassObe, normalizeObeConfig, obeReport, vpaaFileName, vpaaForRecord, vpaaWorkbook } from '../../src/app/obe';
+import type { ClassRecord, Column, Student, TermSetup } from '../../src/app/types';
 import type { ObeConfig } from '../../src/engine';
 
 const obe: ObeConfig = {
@@ -131,5 +131,50 @@ describe('nextOutcomeCode', () => {
   it('numbers POs once the letters run out', () => {
     const az = Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i));
     expect(nextOutcomeCode('PO', az)).toBe('PO27');
+  });
+});
+
+describe('normalizeObeConfig and normalizeClassObe', () => {
+  it('keep a valid setup and class unchanged', () => {
+    expect(normalizeObeConfig(obe)).toEqual(obe);
+    expect(normalizeClassObe(record)).toEqual(record);
+  });
+
+  it('treat a missing or unreadable setup as not set up yet', () => {
+    for (const v of [undefined, null, 'x', 3, []]) expect(normalizeObeConfig(v)).toBeUndefined();
+  });
+
+  it('fill in what an older setup lacks with the defaults', () => {
+    expect(normalizeObeConfig({ cos: [{ id: 'co1', code: 'CO1' }], los: [{ id: 'l1', code: 'LO 1.1' }] })).toEqual({
+      pos: [],
+      cos: [{ id: 'co1', code: 'CO1', description: '', agaCodes: [], poCodes: [], passRawPct: 60, targetClassPct: 75 }],
+      los: [{ id: 'l1', code: 'LO 1.1', moduleCode: '', term: 'PRELIM', coIds: [], description: '' }],
+    });
+  });
+
+  it('drop broken outcomes, bad values and links to COs that do not exist', () => {
+    const n = normalizeObeConfig({
+      pos: [{ id: 'pa', code: 'a' }, { code: 'no id' }, 'junk'],
+      cos: [{ id: 'co1', code: 'CO1', agaCodes: ['A', 'Z', 5], poCodes: ['a', 7], passRawPct: '60', targetClassPct: 150 }],
+      los: [
+        { id: 'l1', code: 'LO 1', moduleCode: 'M1', term: 'MIDTERM', coIds: ['co1', 'gone', 3] },
+        { id: 'l2', code: 'LO 2', term: 'SUMMER', coIds: 'co1' },
+      ],
+    })!;
+    expect(n.pos).toEqual([{ id: 'pa', code: 'a', description: '' }]);
+    expect(n.cos[0]).toMatchObject({ agaCodes: ['A'], poCodes: ['a'], passRawPct: 60, targetClassPct: 75 });
+    expect(n.los.map((l) => [l.term, l.coIds])).toEqual([
+      ['MIDTERM', ['co1']],
+      ['PRELIM', []],
+    ]);
+  });
+
+  it('clean column tags that are not lists of ids', () => {
+    const broken = { ...record.terms.PRELIM.columns[0]!, coIds: 'co1', loIds: ['l1', 4], coWeights: { co1: 2, co2: 'x' } } as unknown as Column;
+    const fixed = normalizeClassObe({ ...record, terms: { ...record.terms, PRELIM: { ...record.terms.PRELIM, columns: [broken] } } });
+    const col = fixed.terms.PRELIM.columns[0]!;
+    expect(col.coIds).toBeUndefined();
+    expect(col.loIds).toEqual(['l1']);
+    expect(col.coWeights).toEqual({ co1: 2 });
   });
 });
