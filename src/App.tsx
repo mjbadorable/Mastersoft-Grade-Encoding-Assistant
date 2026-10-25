@@ -7,6 +7,7 @@ import { BreakdownDrawer } from './components/BreakdownDrawer';
 import { ClassDialog } from './components/ClassDialog';
 import { ConfirmHost } from './components/ConfirmDialog';
 import { MastersoftImportDialog } from './components/MastersoftDialogs';
+import { ObeDashboard } from './components/ObeDashboard';
 import { FinalRatingSummary } from './components/FinalRatingSummary';
 import { OfflineIndicator } from './components/OfflineStatus';
 import { PrivacyNotice } from './components/PrivacyNotice';
@@ -61,8 +62,7 @@ export function App() {
     );
   else if (view === 'SUMMARY') content = <FinalRatingSummary record={active} />;
   else if (view === 'REVERSE') content = <ReverseMode record={active} />;
-  // The OBE dashboard comes in docs/06 Prompt B; nothing links to this view yet.
-  else if (view === 'OBE') content = <p className="p-6 text-sm text-slate-500">OBE Attainment is coming soon.</p>;
+  else if (view === 'OBE') content = <ObeDashboard key={active.id} record={active} />;
   else content = <TermGradebook key={`${active.id}-${view}`} record={active} term={view} />;
 
   return (

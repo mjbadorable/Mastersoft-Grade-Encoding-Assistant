@@ -2,7 +2,8 @@ import { Plus, Trash2 } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { useStore } from '../app/store';
 import type { Category, Column, Component, TermSetup } from '../app/types';
-import { sumMarks, type Term } from '../engine';
+import { OBE_PRESETS, sumMarks, type ObeConfig, type Term } from '../engine';
+import { cn } from '../lib/utils';
 import { confirmAction } from './ConfirmDialog';
 import { Button } from './ui/button';
 import { Dialog, DialogContent } from './ui/dialog';
@@ -17,28 +18,34 @@ interface ColumnDialogProps {
   hasScores: (columnId: string) => boolean;
   /** Component picked when adding a new column. */
   defaultComponent?: Component;
+  /** The class's syllabus outcomes, for CO / LO tags. */
+  obe?: ObeConfig;
 }
 
-export function ColumnDialog({ term, setup, column, onClose, hasScores, defaultComponent }: ColumnDialogProps) {
+export function ColumnDialog({ term, setup, column, onClose, hasScores, defaultComponent, obe }: ColumnDialogProps) {
   return (
     <Dialog open={column !== null} onOpenChange={(o) => !o && onClose()}>
       <DialogContent
         title={column === 'new' ? 'Add column' : 'Edit column'}
         description="Tag each column as Class Standing or Written Exam; the app adds them into Mastersoft's two totals."
       >
-        {column !== null && <ColumnForm term={term} setup={setup} column={column} onClose={onClose} hasScores={hasScores} defaultComponent={defaultComponent} />}
+        {column !== null && (
+          <ColumnForm term={term} setup={setup} column={column} onClose={onClose} hasScores={hasScores} defaultComponent={defaultComponent} obe={obe} />
+        )}
       </DialogContent>
     </Dialog>
   );
 }
 
-function ColumnForm({ term, setup, column, onClose, hasScores, defaultComponent }: ColumnDialogProps & { column: Column | 'new' }) {
-  const { saveColumn, deleteColumn } = useStore();
+function ColumnForm({ term, setup, column, onClose, hasScores, defaultComponent, obe }: ColumnDialogProps & { column: Column | 'new' }) {
+  const { saveColumn, deleteColumn, setObeConfig } = useStore();
   const existing = column === 'new' ? undefined : column;
   const [label, setLabel] = useState(existing?.label ?? '');
   const [max, setMax] = useState(existing ? String(existing.maxScore) : '');
   const [component, setComponent] = useState<Component>(existing?.component ?? defaultComponent ?? 'CS');
   const [categoryId, setCategoryId] = useState(existing?.categoryId ?? setup.categories[0]?.id ?? '');
+  const [coIds, setCoIds] = useState(existing?.coIds ?? []);
+  const [loIds, setLoIds] = useState(existing?.loIds ?? []);
   const weighted = setup.csMode === 'WEIGHTED_CATEGORIES';
   const maxScore = Number(max);
   const maxValid = max.trim() !== '' && Number.isFinite(maxScore) && maxScore > 0;
@@ -52,6 +59,9 @@ function ColumnForm({ term, setup, column, onClose, hasScores, defaultComponent 
       maxScore,
       component,
       categoryId: component === 'CS' && categoryId ? categoryId : undefined,
+      coIds: coIds.length > 0 ? coIds : undefined,
+      loIds: loIds.length > 0 ? loIds : undefined,
+      coWeights: keptWeights(existing?.coWeights, coIds),
     });
     onClose();
   };
@@ -114,6 +124,28 @@ function ColumnForm({ term, setup, column, onClose, hasScores, defaultComponent 
           </Select>
         </Label>
       )}
+      <fieldset className="grid gap-2">
+        <legend className="mb-1 text-xs font-medium text-slate-600">OBE outcomes assessed</legend>
+        {obe && obe.cos.length > 0 ? (
+          <>
+            <TagPills label="Course Outcomes" options={obe.cos.map((c) => ({ id: c.id, code: c.code, title: c.description }))} selected={coIds} onChange={setCoIds} />
+            <TagPills
+              label="Learning Outcomes"
+              options={obe.los.filter((l) => l.term === term).map((l) => ({ id: l.id, code: l.code, title: l.description }))}
+              selected={loIds}
+              onChange={setLoIds}
+            />
+            {coIds.length > 1 && !keptWeights(existing?.coWeights, coIds) && <p className="text-[11px] text-slate-500">Points are split equally across the tagged COs.</p>}
+          </>
+        ) : (
+          <div className="flex items-center justify-between gap-2 rounded-md border border-dashed border-slate-300 px-3 py-2 text-xs text-slate-500">
+            No course outcomes set up for this class yet.
+            <Button size="sm" variant="outline" onClick={() => setObeConfig(OBE_PRESETS.DEFAULT_3CO.config)}>
+              Initialize CO1–CO3
+            </Button>
+          </div>
+        )}
+      </fieldset>
       <div className="mt-2 flex items-center justify-between">
         {existing ? (
           <Button variant="ghost" className="text-red-600 hover:bg-red-50" onClick={remove}>
@@ -127,6 +159,49 @@ function ColumnForm({ term, setup, column, onClose, hasScores, defaultComponent 
         </Button>
       </div>
     </form>
+  );
+}
+
+/** Custom CO weights stay only for COs that are still tagged. */
+function keptWeights(weights: Record<string, number> | undefined, coIds: string[]) {
+  if (!weights) return undefined;
+  const kept = Object.fromEntries(Object.entries(weights).filter(([id]) => coIds.includes(id)));
+  return Object.keys(kept).length > 0 ? kept : undefined;
+}
+
+interface TagPillsProps {
+  label: string;
+  options: { id: string; code: string; title: string }[];
+  selected: string[];
+  onChange: (ids: string[]) => void;
+}
+
+/** Multi-select pill checkboxes for CO / LO tags. */
+function TagPills({ label, options, selected, onChange }: TagPillsProps) {
+  const toggle = (id: string) => onChange(selected.includes(id) ? selected.filter((s) => s !== id) : [...selected, id]);
+  return (
+    <div>
+      <div className="mb-1 text-[11px] text-slate-500">{label}</div>
+      {options.length === 0 ? (
+        <p className="text-[11px] text-slate-400">None for this term.</p>
+      ) : (
+        <div className="flex flex-wrap gap-1.5">
+          {options.map((o) => (
+            <label
+              key={o.id}
+              title={o.title}
+              className={cn(
+                'cursor-pointer rounded-full border px-2.5 py-0.5 text-xs font-medium',
+                selected.includes(o.id) ? 'border-brand bg-brand/10 text-brand' : 'border-slate-300 text-slate-600 hover:bg-slate-50',
+              )}
+            >
+              <input type="checkbox" className="sr-only" checked={selected.includes(o.id)} onChange={() => toggle(o.id)} />
+              {o.code}
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

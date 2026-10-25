@@ -1,8 +1,9 @@
 import { finalOutcome, formatPoint, termOutcome } from '../app/gradebook';
 import { STATUS_NAME, subjectTypeLabel, TERM_LABEL } from '../app/labels';
+import { obeReport } from '../app/obe';
 import { useStore } from '../app/store';
 import type { ClassRecord } from '../app/types';
-import type { ComponentResult } from '../engine';
+import type { ComponentResult, OutcomeAttainment, Term } from '../engine';
 import { FinalCell } from './FinalRatingSummary';
 import { Badge } from './ui/badge';
 import { Dialog, DialogContent } from './ui/dialog';
@@ -157,6 +158,7 @@ function Breakdown({ record, studentId, term }: { record: ClassRecord; studentId
           <FinalCell outcome={final} long />
         </div>
       </section>
+      <ObeSection record={record} studentId={studentId} term={term} />
     </div>
   );
 }
@@ -197,5 +199,71 @@ function Warnings({ outcome }: { outcome: Extract<ReturnType<typeof termOutcome>
         </p>
       ))}
     </section>
+  );
+}
+
+/** The student's CO / LO attainment in this term and over the semester. */
+function ObeSection({ record, studentId, term }: { record: ClassRecord; studentId: string; term: Term }) {
+  const report = obeReport(record);
+  const obe = record.obe;
+  const student = report?.students.find((s) => s.studentId === studentId);
+  if (!obe || !student || obe.cos.length === 0) return null;
+  const now = student.scopes[term];
+  const overall = student.scopes.OVERALL;
+  const lacking = [
+    ...obe.cos.map((c) => ({ code: c.code, a: now.cos[c.id]! })),
+    ...obe.los.map((l) => ({ code: l.code, a: now.los[l.id]! })),
+  ].filter(({ a }) => a.attained === false);
+  return (
+    <section className="border-t border-slate-200 pt-4">
+      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">OBE Attainment (CLOs &amp; LOs)</h3>
+      <table className="tabular w-full text-sm">
+        <thead>
+          <tr className="text-xs text-slate-500">
+            <th className="py-1 text-left font-medium">CO</th>
+            <th className="py-1 text-right font-medium">{TERM_LABEL[term]}</th>
+            <th className="py-1 text-right font-medium">Semester</th>
+          </tr>
+        </thead>
+        <tbody>
+          {obe.cos.map((c) => (
+            <tr key={c.id} className="border-t border-slate-100" title={c.description}>
+              <td className="py-1 font-medium">{c.code}</td>
+              <td className="py-1 text-right">
+                <AttainmentCell a={now.cos[c.id]!} />
+              </td>
+              <td className="py-1 text-right">
+                <AttainmentCell a={overall.cos[c.id]!} />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {lacking.length > 0 && (
+        <div className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
+          <p className="mb-1 font-semibold">Lacking in {TERM_LABEL[term]}</p>
+          <ul className="space-y-0.5">
+            {lacking.map(({ code, a }) => (
+              <li key={code}>
+                <strong>{code}</strong> ({a.rawPct?.toFixed(2)}%){a.lowColumns.length > 0 && ` — below the pass mark in ${a.lowColumns.join(', ')}`}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function AttainmentCell({ a }: { a: OutcomeAttainment }) {
+  if (a.rawPct === null) return <span className="text-xs text-slate-400">No scores yet</span>;
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className="text-xs text-slate-500">
+        {a.rawEarned} / {a.rawMax} =
+      </span>
+      {a.rawPct.toFixed(2)}%
+      <Badge variant={a.attained ? 'green' : 'red'}>{a.attained ? 'Attained' : 'Lacking'}</Badge>
+    </span>
   );
 }

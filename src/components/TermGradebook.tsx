@@ -1,7 +1,8 @@
 import { AlertTriangle, BookOpenCheck, Check, Copy, Crosshair, FileDown, FileSpreadsheet, FileUp, Keyboard, Plus, SlidersHorizontal, UserPlus } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
-import { assessmentTotals, termSetupIssues } from '../app/gradebook';
+import { assessmentTotals, csColumns, termSetupIssues, weColumns } from '../app/gradebook';
 import { SUBJECT_TYPES, subjectTypeLabel, TERM_LABEL, termWeightLabel } from '../app/labels';
+import { columnTags } from '../app/obe';
 import { nextProblem, termProgress, type TermProgress } from '../app/progress';
 import { useStore } from '../app/store';
 import type { ClassRecord, Column, Component, CsMode } from '../app/types';
@@ -156,6 +157,7 @@ export function TermGradebook({ record, term }: { record: ClassRecord; term: Ter
         setup={setup}
         column={columnDialog}
         defaultComponent={newComponent}
+        obe={record.obe}
         onClose={() => setColumnDialog(null)}
         hasScores={(id) => record.students.some((s) => (s.scores[id] ?? '').trim() !== '')}
       />
@@ -253,6 +255,11 @@ function AssessmentBanner({ record, term, children }: { record: ClassRecord; ter
   const setup = record.terms[term];
   const totals = assessmentTotals(setup);
   const issues = termSetupIssues(setup);
+  /** Union of the CO codes on a component's columns, for Mastersoft's TAG CO button. */
+  const tagCo = (columns: Column[]) => {
+    const tagged = new Set(columns.flatMap((c) => columnTags(record.obe, c).cos));
+    return (record.obe?.cos ?? []).map((c) => c.code).filter((code) => tagged.has(code));
+  };
   return (
     <div className="border-b border-slate-200 bg-surface px-4 py-3">
       <div className="flex flex-wrap items-stretch gap-3">
@@ -261,8 +268,13 @@ function AssessmentBanner({ record, term, children }: { record: ClassRecord; ter
           <br />
           Assessment Component
         </div>
-        <TotalCard label={`${TERM_LABEL[term]} – Class Standing`} value={totals.cs} note={setup.csMode === 'WEIGHTED_CATEGORIES' ? 'Weighted categories: always 100' : undefined} />
-        <TotalCard label={`${TERM_LABEL[term]} – Written Exam`} value={totals.we} />
+        <TotalCard
+          label={`${TERM_LABEL[term]} – Class Standing`}
+          value={totals.cs}
+          note={setup.csMode === 'WEIGHTED_CATEGORIES' ? 'Weighted categories: always 100' : undefined}
+          tagCo={tagCo(csColumns(setup))}
+        />
+        <TotalCard label={`${TERM_LABEL[term]} – Written Exam`} value={totals.we} tagCo={tagCo(weColumns(setup))} />
         {issues.length > 0 && (
           <div className="flex min-w-64 flex-1 items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
             <AlertTriangle className="mt-0.5 size-4 shrink-0" />
@@ -279,7 +291,7 @@ function AssessmentBanner({ record, term, children }: { record: ClassRecord; ter
   );
 }
 
-function TotalCard({ label, value, note }: { label: string; value: number | null; note?: string }) {
+function TotalCard({ label, value, note, tagCo }: { label: string; value: number | null; note?: string; tagCo: string[] }) {
   const [copied, setCopied] = useState(false);
   const copy = () => {
     if (value === null) return;
@@ -293,6 +305,11 @@ function TotalCard({ label, value, note }: { label: string; value: number | null
       <div>
         <div className="text-xs font-medium text-slate-600">{label}</div>
         <div className="text-[11px] text-slate-400">{note ?? 'Total Marks'}</div>
+        {tagCo.length > 0 && (
+          <div className="mt-0.5 text-[11px] font-semibold text-brand" title="Course outcomes to select in Mastersoft's TAG CO">
+            TAG CO: {tagCo.join(', ')}
+          </div>
+        )}
       </div>
       <div className="tabular text-2xl font-semibold text-slate-900" aria-label={`${label} Total Marks`}>
         {value ?? '—'}

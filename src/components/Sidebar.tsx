@@ -1,4 +1,4 @@
-import { BookOpen, Calculator, CheckCircle2, ClipboardList, FileUp, Pencil, Plus, ShieldCheck, Table2 } from 'lucide-react';
+import { BookOpen, Calculator, CheckCircle2, ClipboardList, FileUp, Pencil, Plus, ShieldCheck, Table2, Target } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { TERM_LABEL, termWeightLabel } from '../app/labels';
 import { termProgress } from '../app/progress';
@@ -77,6 +77,7 @@ export function Sidebar({ onPrivacy }: { onPrivacy: () => void }) {
           ),
         )}
         {item('SUMMARY', <BookOpen className="size-4" />, 'Final Rating summary')}
+        {item('OBE', <Target className="size-4" />, 'OBE Attainment')}
         <p className="px-3 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Tools</p>
         {item('REVERSE', <Calculator className="size-4" />, 'Final Rating Only')}
         {item('TABLE', <Table2 className="size-4" />, 'Transmutation table')}

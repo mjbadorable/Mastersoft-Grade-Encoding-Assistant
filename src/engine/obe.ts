@@ -41,6 +41,9 @@ export interface LearningOutcome {
 export interface ObeConfig {
   programName?: string;
   collegeName?: string;
+  /** The syllabus PDF the setup was read from, and when (the file itself is not kept). */
+  syllabusFileName?: string;
+  syllabusUploadedAt?: number;
   pos: ProgramOutcome[];
   cos: CourseOutcome[];
   los: LearningOutcome[];

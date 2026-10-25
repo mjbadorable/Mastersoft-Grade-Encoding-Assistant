@@ -2,6 +2,7 @@ import { FileSpreadsheet, FileUp, Plus, Trash2, UserPlus } from 'lucide-react';
 import { useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
 import { assessmentTotals, csColumns, duplicateStudentIds, formatPoint, parseScore, sameIdAs, termOutcome, weColumns, type TermOutcome } from '../app/gradebook';
 import { STATUS_NAME, STATUSES } from '../app/labels';
+import { columnTags } from '../app/obe';
 import { useStore, type CellKey } from '../app/store';
 import type { ClassRecord, Column, Component, Student } from '../app/types';
 import { rules, type Status, type Term } from '../engine';
@@ -228,6 +229,7 @@ export function GradebookGrid({ record, term, onEditColumn, onAddColumn, onAddSt
                     / {c.maxScore}
                     {weighted && c.component === 'CS' && <span className="ml-1">· {categoryName(c) ?? 'no category'}</span>}
                   </div>
+                  <ObeTags record={record} column={c} />
                 </button>
               </th>
             ))}
@@ -441,4 +443,16 @@ function OutputCell({ outcome, column, first }: { outcome: TermOutcome; column: 
       );
     }
   }
+}
+
+/** Compact CO and LO pills under a column header. */
+function ObeTags({ record, column }: { record: ClassRecord; column: Column }) {
+  const { cos, los } = columnTags(record.obe, column);
+  if (cos.length === 0 && los.length === 0) return null;
+  return (
+    <div className="mt-0.5 flex flex-wrap gap-0.5" title={[...cos, ...los].join(', ')}>
+      {cos.length > 0 && <span className="rounded bg-brand/10 px-1 text-[10px] font-semibold leading-4 text-brand">{cos.join(' · ')}</span>}
+      {los.length > 0 && <span className="rounded bg-slate-200/70 px-1 text-[10px] font-medium leading-4 text-slate-600">{los.join(' · ')}</span>}
+    </div>
+  );
 }
