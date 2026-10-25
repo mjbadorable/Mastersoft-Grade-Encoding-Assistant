@@ -85,7 +85,11 @@ flowchart LR
 ## Precision rules
 
 - **Grade engine:** every division and rounding step goes through `src/engine/rounding.ts`, which scales values to integers and rounds half-up exactly (decision D21), so an exact .5 is never stored as .4999… The golden tests in `tests/engine/fixtures.test.ts` compare results with real Mastersoft grade reports.
-- **OBE engine:** splits a column's points across COs with floating-point shares and rounds with `Math.round`, so some percentages can be 0.01 off at x.xx5 boundaries. Being replaced with exact fractions (see `docs/superpowers/plans/2026-10-25-baseline-and-obe-precision.md`, Task 5).
+- **OBE engine:** all splitting, summing and dividing uses exact BigInt fractions (`src/engine/fraction.ts`). A column split 1/3 or 3/97 across COs never drifts, and a 40.625% is shown as 40.63%. Only the values shown are rounded, half-up to 2 decimals.
+  - A student attains an outcome when the **shown** 2-decimal raw % is at or above the pass mark (compared as whole hundredths, so a 64.15% pass mark scored exactly is attained).
+  - CO weights that are missing, negative or not a number count as 0; if all of a column's weights are 0, its points are split equally.
+  - Scores, maximum scores and pass marks that are not plain decimals (e.g. `1e-7`) are skipped, or fall back to the default 60% pass mark, instead of breaking the dashboard.
+  - Class means and the VPAA / PO formulas use whole-number hundredths and `roundHalfUpDiv`.
 
 ## Tooling
 

@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { finalOutcome, formatPoint, termOutcome } from '../app/gradebook';
 import { STATUS_NAME, subjectTypeLabel, TERM_LABEL } from '../app/labels';
 import { obeReport } from '../app/obe';
@@ -204,7 +205,7 @@ function Warnings({ outcome }: { outcome: Extract<ReturnType<typeof termOutcome>
 
 /** The student's CO / LO attainment in this term and over the semester. */
 function ObeSection({ record, studentId, term }: { record: ClassRecord; studentId: string; term: Term }) {
-  const report = obeReport(record);
+  const report = useMemo(() => obeReport(record), [record]);
   const obe = record.obe;
   const student = report?.students.find((s) => s.studentId === studentId);
   if (!obe || !student || obe.cos.length === 0) return null;

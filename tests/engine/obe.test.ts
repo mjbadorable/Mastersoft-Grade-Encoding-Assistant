@@ -4,6 +4,7 @@ import {
   computeObe,
   OBE_PRESETS,
   OBE_SCOPES,
+  type ObeScope,
   poRollup,
   vpaaSheet,
   type CourseOutcome,
@@ -222,5 +223,111 @@ describe('OBE_PRESETS', () => {
     expect(CPE122_DISCRETE_MATH.config.cos.map((c) => c.code)).toEqual(['CO1', 'CO2', 'CO3', 'CO4']);
     expect(CPE122_DISCRETE_MATH.config.pos.map((p) => p.code)).toEqual(['a', 'm']);
     expect(new Set(CPE122_DISCRETE_MATH.config.los.map((l) => l.moduleCode)).size).toBe(8);
+  });
+});
+
+describe('computeObe — exact arithmetic', () => {
+  const cfg = (cos: CourseOutcome[]): ObeConfig => ({ pos: [], cos, los: [] });
+  const prelim = (columns: ObeTerms['PRELIM']['columns']): ObeTerms => ({
+    PRELIM: { columns },
+    MIDTERM: { columns: [] },
+    FINAL: { columns: [] },
+  });
+  const co1 = (r: ReturnType<typeof computeObe>, scope: ObeScope = 'PRELIM', id = 'co1') => r.students[0]!.scopes[scope].cos[id]!;
+
+  it.each([
+    ['1', '4', 40.63], // 13/32 = 40.625%
+    ['2', '1', 15.63], // 5/32  = 15.625%
+  ])('rounds a 1/3 split half-up (a=%s, b=%s → %s)', (a, b, pct) => {
+    const r = computeObe(
+      cfg([co(1, []), co(2, []), co(3, [])]),
+      prelim([
+        { id: 'a', label: 'A', maxScore: 2, coIds: ['co1', 'co2', 'co3'] },
+        { id: 'b', label: 'B', maxScore: 10, coIds: ['co1'] },
+      ]),
+      [{ id: 's', scores: { a, b } }],
+    );
+    expect(co1(r).rawPct).toBe(pct);
+  });
+
+  it('rounds a 3/97 weighted split half-up, the same for points and ratios', () => {
+    for (const coWeights of [{ co1: 3, co2: 97 }, { co1: 0.03, co2: 0.97 }]) {
+      const r = computeObe(
+        cfg([co(1, []), co(2, [])]),
+        prelim([{ id: 'x', label: 'X', maxScore: 32, coIds: ['co1', 'co2'], coWeights }]),
+        [{ id: 's', scores: { x: '11' } }],
+      );
+      expect(co1(r).rawPct).toBe(34.38); // 11/32 = 34.375%
+    }
+  });
+
+  it('attains a two-decimal pass mark scored exactly, without flagging the column', () => {
+    const r = computeObe(
+      cfg([{ ...co(1, []), passRawPct: 64.15 }]),
+      prelim([{ id: 'x', label: 'X', maxScore: 2000, coIds: ['co1'] }]),
+      [{ id: 's', scores: { x: '1283' } }],
+    );
+    expect(co1(r)).toMatchObject({ rawPct: 64.15, attained: true, lowColumns: [] });
+  });
+
+  it('skips scores that are not plain decimals instead of crashing', () => {
+    const r = computeObe(
+      cfg([co(1, [])]),
+      prelim([
+        { id: 'x', label: 'X', maxScore: 10, coIds: ['co1'] },
+        { id: 'y', label: 'Y', maxScore: 10, coIds: ['co1'] },
+      ]),
+      [{ id: 's', scores: { x: '0.0000001', y: '5' } }],
+    );
+    expect(co1(r)).toMatchObject({ rawPct: 50, rawMax: 10 });
+  });
+
+  it('falls back to the default pass mark when the pass mark is not a plain decimal', () => {
+    const r = computeObe(
+      cfg([{ ...co(1, []), passRawPct: 1e-7 }]),
+      prelim([{ id: 'x', label: 'X', maxScore: 10, coIds: ['co1'] }]),
+      [{ id: 's', scores: { x: '5' } }],
+    );
+    expect(co1(r)).toMatchObject({ rawPct: 50, attained: false, lowColumns: ['X'] }); // 50% < default 60%
+  });
+
+  it('skips a column whose maximum score is not a plain decimal', () => {
+    const r = computeObe(
+      cfg([co(1, [])]),
+      prelim([
+        { id: 'x', label: 'X', maxScore: 1e-7, coIds: ['co1'] },
+        { id: 'y', label: 'Y', maxScore: 10, coIds: ['co1'] },
+      ]),
+      [{ id: 's', scores: { x: '0', y: '7' } }],
+    );
+    expect(co1(r)).toMatchObject({ rawPct: 70, rawMax: 10 });
+  });
+
+  it.each([
+    [{ co1: 0, co2: 0 }, 33.33], // all zero → equal split: 5 / 15
+    [{ co1: Number.NaN, co2: 1 }, 0], // invalid → 0: co1 gets nothing from A
+    [{ co1: -5, co2: 1 }, 0],
+  ])('treats invalid weights as 0 and all-zero as an equal split (%o)', (coWeights, pct) => {
+    const r = computeObe(
+      cfg([co(1, []), co(2, [])]),
+      prelim([
+        { id: 'a', label: 'A', maxScore: 10, coIds: ['co1', 'co2'], coWeights },
+        { id: 'b', label: 'B', maxScore: 10, coIds: ['co1'] },
+      ]),
+      [{ id: 's', scores: { a: '10', b: '0' } }],
+    );
+    expect(co1(r).rawPct).toBe(pct);
+  });
+
+  it('stays exact over 120 columns split across 7 COs', () => {
+    const cos = [1, 2, 3, 4, 5, 6, 7].map((n) => co(n, []));
+    const coWeights = Object.fromEntries(cos.map((c, i) => [c.id, i + 4])); // 4..10, total 49
+    const cols = (t: string) =>
+      Array.from({ length: 40 }, (_, i) => ({ id: `${t}${i}`, label: `${t}${i}`, maxScore: 7, coIds: cos.map((c) => c.id), coWeights }));
+    const terms: ObeTerms = { PRELIM: { columns: cols('p') }, MIDTERM: { columns: cols('m') }, FINAL: { columns: cols('f') } };
+    const scores = Object.fromEntries(['p', 'm', 'f'].flatMap((t) => cols(t).map((c) => [c.id, '7'])));
+    const r = computeObe(cfg(cos), terms, [{ id: 's', scores }]);
+    for (const c of cos) expect(co1(r, 'OVERALL', c.id)).toMatchObject({ rawPct: 100, attained: true });
+    expect(co1(r, 'OVERALL').rawMax).toBe(68.57); // 840 × 4/49 = 68.571…
   });
 });

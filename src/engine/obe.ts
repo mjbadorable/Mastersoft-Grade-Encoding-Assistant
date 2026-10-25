@@ -2,6 +2,7 @@
 // same gradebook: direct CO/LO attainment from tagged columns, the VPAA sheet
 // (LO-count weight × Final Rating), and the PO roll-up of class CO attainment.
 import { transmute } from './compute';
+import { add, div, frac, fromDecimal, hundredthsOf, mul, roundToHundredths, type Fraction } from './fraction';
 import { roundHalfUp, roundHalfUpDiv } from './rounding';
 import { rules, type Term } from './rules';
 
@@ -117,24 +118,31 @@ export interface ObeReport {
   classLos: Record<ObeScope, ClassOutcomeSummary[]>;
 }
 
-/** A score that counts toward attainment: entered, a number, and within 0..max. */
+/** A number that can be read as an exact fraction: finite and not in exponent form (1e-7). */
+const isPlain = (x: number | undefined): x is number => x !== undefined && Number.isFinite(x) && !String(x).includes('e');
+
+/** A score that counts toward attainment: entered, a plain number, and within 0..max. */
 function scoreOf(text: string | undefined, max: number): number | null {
   const t = (text ?? '').trim();
   if (t === '') return null;
   const v = Number(t);
-  return Number.isFinite(v) && v >= 0 && v <= max ? v : null;
+  return isPlain(v) && v >= 0 && v <= max ? v : null;
 }
 
-/** Splits a column across the tagged outcomes that still exist in the config. */
-function shares(tagged: string[] | undefined, known: Set<string>, weights?: Record<string, number>): Map<string, number> {
+/** A CO weight counts only when it is a plain number >= 0; anything else counts as 0. */
+const weightOf = (w: number | undefined) => (isPlain(w) && w >= 0 ? w : 0);
+
+/** The pass mark in hundredths of a %; one that isn't a plain number uses the default. */
+const passHundredthsOf = (pct: number) => hundredthsOf(fromDecimal(isPlain(pct) && pct >= 0 ? pct : OBE_PASS_RAW_PCT), frac(100n));
+
+/** Splits a column across the tagged outcomes that still exist in the config, exactly. */
+function shares(tagged: string[] | undefined, known: Set<string>, weights?: Record<string, number>): Map<string, Fraction> {
   const ids = [...new Set(tagged ?? [])].filter((id) => known.has(id));
-  const w = ids.map((id) => Math.max(0, weights?.[id] ?? 0));
-  const total = w.reduce((a, b) => a + b, 0);
-  return new Map(ids.map((id, i) => [id, total > 0 ? w[i]! / total : 1 / ids.length]));
+  const w = ids.map((id) => fromDecimal(weightOf(weights?.[id])));
+  const total = w.reduce(add, frac(0n));
+  return new Map(ids.map((id, i) => [id, total.n > 0n ? div(w[i]!, total) : frac(1n, BigInt(ids.length))]));
 }
 
-/** % in hundredths, as a whole number (62.5% → 6250). */
-const hundredths = (part: number, whole: number) => Math.round((part * 10000) / whole);
 const meanOfHundredths = (values: number[]) =>
   values.length === 0 ? null : roundHalfUpDiv(values.reduce((a, b) => a + b, 0), values.length) / 100;
 
@@ -159,29 +167,38 @@ interface Outcome {
 function attainments(
   outcomes: Outcome[],
   columns: ObeColumn[],
-  split: (c: ObeColumn) => Map<string, number>,
+  split: (c: ObeColumn) => Map<string, Fraction>,
   student: ObeStudent,
 ): Record<string, OutcomeAttainment> {
+  // Each column's shares and the student's score in it, read once for all outcomes.
+  const scored = columns.flatMap((col) => {
+    const score = scoreOf(student.scores[col.id], col.maxScore);
+    if (score === null || !isPlain(col.maxScore) || col.maxScore <= 0) return [];
+    const max = fromDecimal(col.maxScore);
+    const points = fromDecimal(score);
+    return [{ label: col.label, shares: split(col), points, max, pct: hundredthsOf(points, max) }];
+  });
   const result: Record<string, OutcomeAttainment> = {};
   for (const o of outcomes) {
-    let earned = 0;
-    let max = 0;
+    const passHundredths = passHundredthsOf(o.passRawPct);
+    let earned = frac(0n);
+    let max = frac(0n);
     const lowColumns: string[] = [];
-    for (const col of columns) {
-      const share = split(col).get(o.id);
-      const score = scoreOf(student.scores[col.id], col.maxScore);
-      if (share === undefined || score === null || col.maxScore <= 0) continue;
-      earned += score * share;
-      max += col.maxScore * share;
-      if (hundredths(score, col.maxScore) < o.passRawPct * 100) lowColumns.push(col.label);
+    for (const col of scored) {
+      const share = col.shares.get(o.id);
+      if (share === undefined) continue;
+      earned = add(earned, mul(col.points, share));
+      max = add(max, mul(col.max, share));
+      if (col.pct < passHundredths) lowColumns.push(col.label);
     }
-    const rawPct = max > 0 ? hundredths(earned, max) / 100 : null;
+    const rawHundredths = max.n > 0n ? hundredthsOf(earned, max) : null;
+    const rawPct = rawHundredths === null ? null : rawHundredths / 100;
     result[o.id] = {
-      rawEarned: Math.round(earned * 100) / 100,
-      rawMax: Math.round(max * 100) / 100,
+      rawEarned: roundToHundredths(earned),
+      rawMax: roundToHundredths(max),
       rawPct,
       transmutedGrade: rawPct === null ? null : transmute(roundHalfUp(rawPct)),
-      attained: rawPct === null ? null : rawPct >= o.passRawPct,
+      attained: rawHundredths === null ? null : rawHundredths >= passHundredths,
       lowColumns,
     };
   }
