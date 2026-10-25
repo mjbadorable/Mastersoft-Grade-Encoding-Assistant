@@ -270,7 +270,7 @@ export function extractSyllabusFromLines(allLines: SyllabusLine[]): SyllabusExtr
   const all = lines.map(lineText);
   const college = lines.flatMap((l) => l.segs).find((s) => /^college of\s+\S/i.test(s.text))?.text ?? '';
   const program = /students of the (.+?) program/i.exec(all.join('\n'))?.[1] ?? '';
-  const cutoff = /(?:cut\s*-?\s*off score\s*=?\s*|passing rate[^%\n]{0,80}?)(\d{1,3})\s*%/i.exec(all.join('\n'));
+  const { passRawPct, targetClassPct } = readPassMarks(all.join('\n'));
   const pos = readPos(lines);
   const cos = readCos(lines);
   const los = readLos(lines, notes);
@@ -283,10 +283,36 @@ export function extractSyllabusFromLines(allLines: SyllabusLine[]): SyllabusExtr
     pos,
     cos,
     los,
-    passRawPct: cutoff ? Number(cutoff[1]) : null,
-    targetClassPct: null,
+    passRawPct,
+    targetClassPct,
     notes,
   };
+}
+
+/** Words that tie a passing rate to each student's own work, not to the class as a whole. */
+const INDIVIDUAL_WORK = /activit|quiz|assessment|exam|seatwork|task|raw score|each student|per student/i;
+
+/**
+ * Tells the student's raw pass mark from the class attainment target. "Cut off score = 60%" and
+ * a passing rate for activities, quizzes or exams are the raw pass mark. Any other passing rate
+ * ("Passing rate: 75%") and "80% of the students" are the class target: the share of students
+ * who must attain each CO.
+ */
+function readPassMarks(text: string): { passRawPct: number | null; targetClassPct: number | null } {
+  let passRawPct: number | null = null;
+  let targetClassPct: number | null = null;
+  const pct = (s: string | undefined) => {
+    const v = Number(s);
+    return v >= 0 && v <= 100 ? v : null;
+  };
+  for (const m of text.matchAll(/cut\s*-?\s*off score\s*=?\s*(\d{1,3})\s*%/gi)) passRawPct ??= pct(m[1]);
+  for (const m of text.matchAll(/passing rate([^%\n]{0,80}?)(\d{1,3})\s*%([^.\n]{0,40})/gi)) {
+    if (INDIVIDUAL_WORK.test(m[1]! + m[3]!)) passRawPct ??= pct(m[2]);
+    else targetClassPct ??= pct(m[2]);
+  }
+  const cohort = /(\d{1,3})\s*%\s*of\s+(?:the\s+)?(?:students|class|learners)\b/i.exec(text);
+  if (cohort) targetClassPct ??= pct(cohort[1]);
+  return { passRawPct, targetClassPct };
 }
 
 const key = (code: string) => code.replace(/\s+/g, '').toUpperCase();

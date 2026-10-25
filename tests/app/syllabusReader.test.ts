@@ -76,6 +76,35 @@ describe('obeConfigFromExtraction', () => {
 /** A line of text pieces at the given x positions. */
 const line = (page: number, ...segs: [number, string][]): SyllabusLine => ({ page, segs: segs.map(([x, text]) => ({ x, text })) });
 
+describe('extractSyllabusFromLines: pass mark vs class target', () => {
+  const read = (...texts: string[]) => extractSyllabusFromLines(texts.map((s) => line(1, [23, s])));
+
+  it.each([
+    ['Note: Passing rate for all activities, quizzes, assessments is 60%.', 60],
+    ['Cut off score = 60% of raw score', 60],
+    ['Passing rate per examination: 50%', 50],
+  ])('reads an individual pass mark from %j', (text, pct) => {
+    expect(read(text)).toMatchObject({ passRawPct: pct, targetClassPct: null });
+  });
+
+  it.each([
+    ['Passing rate: 75%', 75],
+    ['The course has a passing rate of 70%.', 70],
+    ['At least 80% of the students should attain each CO.', 80],
+  ])('reads a class attainment target from %j', (text, pct) => {
+    expect(read(text)).toMatchObject({ passRawPct: null, targetClassPct: pct });
+  });
+
+  it('reads both when the syllabus states both', () => {
+    expect(read('Cut off score = 60% of raw score', 'Passing rate: 75%')).toMatchObject({ passRawPct: 60, targetClassPct: 75 });
+  });
+
+  it('sets the class target of every CO', () => {
+    const { config } = obeConfigFromExtraction({ ...extraction, targetClassPct: 80 }, counter());
+    expect(config.cos.map((c) => c.targetClassPct)).toEqual([80, 80]);
+  });
+});
+
 describe('extractSyllabusFromLines (USA layout, decimal LOs)', () => {
   // A cut-down syllabus in the HM5 layout: CO descriptions wrap above and below their "CO n:" label.
   const lines = [
