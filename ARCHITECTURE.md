@@ -26,7 +26,7 @@ Dexie database `mastersoft-grade-encoding` (`src/app/db.ts`), **version 1**:
 | `classes` | `id`, `updatedAt` | One `ClassRecord` per class and section |
 | `meta` | `key` | App settings: `noticeSeen`, `activeClassId`, `backedUp` (backup fingerprints) |
 
-`ClassRecord` (`src/app/types.ts`): `id`, subject code/name, section, `subjectType`, `terms` (`PRELIM`/`MIDTERM`/`FINAL` → `csMode`, `categories`, `columns` with `maxScore`, `component` CS/WE and optional OBE tags `coIds`/`loIds`/`coWeights`), `students` (scores stored **as typed text** by column id, statuses per term, optional reverse-mode target and Mastersoft row), optional `obe` config (POs, COs, LOs), `updatedAt`.
+`ClassRecord` (`src/app/types.ts`): `id`, subject code/name, section, `subjectType`, `terms` (`PRELIM`/`MIDTERM`/`FINAL` → `csMode`, `categories`, `columns` with `maxScore`, `component` CS/WE and optional OBE tags `coIds`/`loIds`, and `coWeights` — custom CO splits, which no screen edits yet: the column dialog keeps them when they come from a restored backup), `students` (scores stored **as typed text** by column id, statuses per term, optional reverse-mode target and Mastersoft row), optional `obe` config (POs, COs, LOs), `updatedAt`.
 
 **Computed grades are never stored.** Every grade and OBE figure is recomputed from the record when shown, so a rules change or a fix can never leave stale results behind.
 
@@ -70,7 +70,7 @@ flowchart LR
 flowchart LR
   A[Syllabus PDF or preset] --> B["syllabusReader.ts (pdf.js, in the browser)"]
   B --> C["store.ts: setObeConfig → record.obe"]
-  D[Column dialog: CO / LO tags and CO weights] --> E["store.ts: saveColumn"]
+  D[Column dialog: CO / LO tags] --> E["store.ts: saveColumn"]
   C --> F["app/obe.ts: obeReport, vpaaForRecord"]
   E --> F
   F --> G["engine/obe.ts: computeObe, vpaaSheet, poRollup"]
@@ -85,8 +85,8 @@ flowchart LR
 ## Precision rules
 
 - **Grade engine:** every division and rounding step goes through `src/engine/rounding.ts`, which scales values to integers and rounds half-up exactly (decision D21), so an exact .5 is never stored as .4999… The golden tests in `tests/engine/fixtures.test.ts` compare results with real Mastersoft grade reports.
-- **OBE engine:** all splitting, summing and dividing uses exact BigInt fractions (`src/engine/fraction.ts`). A column split 1/3 or 3/97 across COs never drifts, and a 40.625% is shown as 40.63%. Only the values shown are rounded, half-up to 2 decimals.
-  - A student attains an outcome when the **shown** 2-decimal raw % is at or above the pass mark (compared as whole hundredths, so a 64.15% pass mark scored exactly is attained).
+- **OBE engine:** all splitting, summing and dividing is exact (BigInt fractions, `src/engine/fraction.ts`). A column split 1/3 or 3/97 across COs never drifts, and a 40.625% is shown as 40.63%. Only the values shown are rounded, half-up to 2 decimals. For speed, each scope (term or overall) puts all its columns on one common whole-number scale once per class, so each student's totals are plain integer sums (about 50 ms for 50 students × 45 columns, even with different CO weights in every column).
+  - A student attains an outcome when the **shown** 2-decimal raw % is at or above the pass mark: a 64.15% pass mark scored exactly is attained; against a 64.154% pass mark, 64.15% is not.
   - CO weights that are missing, negative or not a number count as 0; if all of a column's weights are 0, its points are split equally.
   - Scores, maximum scores and pass marks that are not plain decimals (e.g. `1e-7`) are skipped, or fall back to the default 60% pass mark, instead of breaking the dashboard.
   - Class means and the VPAA / PO formulas use whole-number hundredths and `roundHalfUpDiv`.

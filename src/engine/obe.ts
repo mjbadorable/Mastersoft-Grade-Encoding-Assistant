@@ -2,7 +2,7 @@
 // same gradebook: direct CO/LO attainment from tagged columns, the VPAA sheet
 // (LO-count weight × Final Rating), and the PO roll-up of class CO attainment.
 import { transmute } from './compute';
-import { add, div, frac, fromDecimal, hundredthsOf, mul, roundToHundredths, type Fraction } from './fraction';
+import { add, div, frac, fromDecimal, hundredthsOf, lcm, mul, roundToHundredths, type Fraction } from './fraction';
 import { roundHalfUp, roundHalfUpDiv } from './rounding';
 import { rules, type Term } from './rules';
 
@@ -132,8 +132,14 @@ function scoreOf(text: string | undefined, max: number): number | null {
 /** A CO weight counts only when it is a plain number >= 0; anything else counts as 0. */
 const weightOf = (w: number | undefined) => (isPlain(w) && w >= 0 ? w : 0);
 
-/** The pass mark in hundredths of a %; one that isn't a plain number uses the default. */
-const passHundredthsOf = (pct: number) => hundredthsOf(fromDecimal(isPlain(pct) && pct >= 0 ? pct : OBE_PASS_RAW_PCT), frac(100n));
+/**
+ * The lowest shown % (in whole hundredths) that meets the pass mark: 64.15 → 6415, 64.154 → 6416.
+ * A pass mark that isn't a plain number uses the default.
+ */
+function passHundredthsOf(pct: number): number {
+  const p = fromDecimal(isPlain(pct) && pct >= 0 ? pct : OBE_PASS_RAW_PCT);
+  return Number((p.n * 100n + p.d - 1n) / p.d);
+}
 
 /** Splits a column across the tagged outcomes that still exist in the config, exactly. */
 function shares(tagged: string[] | undefined, known: Set<string>, weights?: Record<string, number>): Map<string, Fraction> {
@@ -163,39 +169,85 @@ interface Outcome {
   targetClassPct: number;
 }
 
-/** One student's attainment of each outcome over the given columns. */
-function attainments(
-  outcomes: Outcome[],
-  columns: ObeColumn[],
-  split: (c: ObeColumn) => Map<string, Fraction>,
-  student: ObeStudent,
-): Record<string, OutcomeAttainment> {
-  // Each column's shares and the student's score in it, read once for all outcomes.
-  const scored = columns.flatMap((col) => {
+/** A column's part of one outcome, in units of the scope's common scale (see `prepareScope`). */
+interface ColumnShare {
+  /** Earned units per scaled point the student scores. */
+  perPoint: bigint;
+  /** The column's maximum, in units. */
+  maxUnits: bigint;
+}
+
+interface PreparedScope {
+  columns: { col: ObeColumn; max: Fraction; shares: Map<string, ColumnShare> }[];
+  /** Units per 1 raw point: earned and max totals are divided by this. */
+  unit: bigint;
+  /** Every score times this is a whole number. */
+  pointScale: bigint;
+}
+
+/**
+ * Reads a scope's columns once for the whole class and puts every column on one common scale,
+ * so each student's totals are exact whole-number sums (no fractions to reduce per student).
+ */
+function prepareScope(columns: ObeColumn[], split: (c: ObeColumn) => Map<string, Fraction>, students: ObeStudent[]): PreparedScope {
+  const usable = columns
+    .filter((col) => isPlain(col.maxScore) && col.maxScore > 0)
+    .map((col) => ({ col, max: fromDecimal(col.maxScore), split: split(col) }));
+  let pointScale = 1n;
+  for (const { col } of usable) {
+    for (const s of students) {
+      const score = scoreOf(s.scores[col.id], col.maxScore);
+      if (score !== null) pointScale = lcm(pointScale, fromDecimal(score).d);
+    }
+  }
+  let shareScale = 1n;
+  for (const { max, split: shares } of usable) {
+    for (const share of shares.values()) shareScale = lcm(lcm(shareScale, share.d), mul(max, share).d);
+  }
+  const unit = pointScale * shareScale;
+  return {
+    unit,
+    pointScale,
+    columns: usable.map(({ col, max, split: shares }) => ({
+      col,
+      max,
+      shares: new Map(
+        [...shares].map(([id, share]) => {
+          const m = mul(max, share);
+          return [id, { perPoint: share.n * (shareScale / share.d), maxUnits: (m.n * unit) / m.d }];
+        }),
+      ),
+    })),
+  };
+}
+
+/** One student's attainment of each outcome over a prepared scope. */
+function attainments(outcomes: Outcome[], scope: PreparedScope, student: ObeStudent): Record<string, OutcomeAttainment> {
+  // The student's score in each column, read once for all outcomes.
+  const scored = scope.columns.flatMap(({ col, max, shares }) => {
     const score = scoreOf(student.scores[col.id], col.maxScore);
-    if (score === null || !isPlain(col.maxScore) || col.maxScore <= 0) return [];
-    const max = fromDecimal(col.maxScore);
+    if (score === null) return [];
     const points = fromDecimal(score);
-    return [{ label: col.label, shares: split(col), points, max, pct: hundredthsOf(points, max) }];
+    return [{ label: col.label, shares, scaled: points.n * (scope.pointScale / points.d), pct: hundredthsOf(points, max) }];
   });
   const result: Record<string, OutcomeAttainment> = {};
   for (const o of outcomes) {
     const passHundredths = passHundredthsOf(o.passRawPct);
-    let earned = frac(0n);
-    let max = frac(0n);
+    let earned = 0n;
+    let max = 0n;
     const lowColumns: string[] = [];
     for (const col of scored) {
       const share = col.shares.get(o.id);
       if (share === undefined) continue;
-      earned = add(earned, mul(col.points, share));
-      max = add(max, mul(col.max, share));
+      earned += col.scaled * share.perPoint;
+      max += share.maxUnits;
       if (col.pct < passHundredths) lowColumns.push(col.label);
     }
-    const rawHundredths = max.n > 0n ? hundredthsOf(earned, max) : null;
+    const rawHundredths = max > 0n ? hundredthsOf(frac(earned), frac(max)) : null;
     const rawPct = rawHundredths === null ? null : rawHundredths / 100;
     result[o.id] = {
-      rawEarned: roundToHundredths(earned),
-      rawMax: roundToHundredths(max),
+      rawEarned: roundToHundredths(frac(earned, scope.unit)),
+      rawMax: roundToHundredths(frac(max, scope.unit)),
       rawPct,
       transmutedGrade: rawPct === null ? null : transmute(roundHalfUp(rawPct)),
       attained: rawHundredths === null ? null : rawHundredths >= passHundredths,
@@ -232,12 +284,18 @@ export function computeObe(config: ObeConfig, terms: ObeTerms, students: ObeStud
   const los: Outcome[] = config.los.map((l) => ({ id: l.id, code: l.code, ...loThresholds(l, config.cos) }));
   const columnsIn = (scope: ObeScope) => (scope === 'OVERALL' ? TERMS.flatMap((t) => terms[t].columns) : terms[scope].columns);
 
+  const prepared = Object.fromEntries(
+    OBE_SCOPES.map((scope) => [
+      scope,
+      { cos: prepareScope(columnsIn(scope), coSplit, students), los: prepareScope(columnsIn(scope), loSplit, students) },
+    ]),
+  ) as Record<ObeScope, { cos: PreparedScope; los: PreparedScope }>;
+
   const studentResults: StudentObe[] = students.map((s) => {
     const scopes = {} as Record<ObeScope, StudentObeScope>;
     for (const scope of OBE_SCOPES) {
-      const cols = columnsIn(scope);
-      const coResults = attainments(config.cos, cols, coSplit, s);
-      const loResults = attainments(los, cols, loSplit, s);
+      const coResults = attainments(config.cos, prepared[scope].cos, s);
+      const loResults = attainments(los, prepared[scope].los, s);
       scopes[scope] = {
         cos: coResults,
         los: loResults,

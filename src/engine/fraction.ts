@@ -18,6 +18,9 @@ function gcd(a: bigint, b: bigint): bigint {
   return a;
 }
 
+/** Least common multiple of two positive integers. */
+export const lcm = (a: bigint, b: bigint) => (a / gcd(a, b)) * b;
+
 export function frac(n: bigint, d = 1n): Fraction {
   if (d === 0n) throw new RangeError('Fraction denominator must not be 0');
   if (d < 0n) [n, d] = [-n, -d];

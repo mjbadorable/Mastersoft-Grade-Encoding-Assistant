@@ -1,6 +1,6 @@
 // Exact fractions for OBE math: no floating-point drift in splits, sums or rounding.
 import { describe, expect, it } from 'vitest';
-import { add, div, frac, fromDecimal, hundredthsOf, mul, roundToHundredths } from '../../src/engine/fraction';
+import { add, div, frac, fromDecimal, hundredthsOf, lcm, mul, roundToHundredths } from '../../src/engine/fraction';
 
 describe('fraction', () => {
   it('normalises', () => {
@@ -33,6 +33,12 @@ describe('fraction', () => {
     expect(hundredthsOf(frac(2n, 3n), frac(1n))).toBe(6667);
     expect(() => hundredthsOf(frac(1n), frac(0n))).toThrow(RangeError);
     expect(() => hundredthsOf(frac(-1n), frac(1n))).toThrow(RangeError);
+  });
+
+  it('finds the least common multiple', () => {
+    expect(lcm(4n, 6n)).toBe(12n);
+    expect(lcm(1n, 49n)).toBe(49n);
+    expect(lcm(100n, 75n)).toBe(300n);
   });
 
   it('rounds to 2 decimals half-up', () => {

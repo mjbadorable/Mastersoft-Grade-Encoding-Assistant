@@ -331,3 +331,33 @@ describe('computeObe — exact arithmetic', () => {
     expect(co1(r, 'OVERALL').rawMax).toBe(68.57); // 840 × 4/49 = 68.571…
   });
 });
+
+describe('computeObe — final review fixes', () => {
+  const cfg = (cos: CourseOutcome[]): ObeConfig => ({ pos: [], cos, los: [] });
+
+  it('does not attain when the shown % is below a three-decimal pass mark', () => {
+    const r = computeObe(
+      cfg([{ ...co(1, []), passRawPct: 64.154 }]),
+      { PRELIM: { columns: [{ id: 'x', label: 'X', maxScore: 2000, coIds: ['co1'] }] }, MIDTERM: { columns: [] }, FINAL: { columns: [] } },
+      [{ id: 's', scores: { x: '1283' } }], // 64.15% < 64.154%
+    );
+    expect(r.students[0]!.scopes.PRELIM.cos.co1).toMatchObject({ rawPct: 64.15, attained: false, lowColumns: ['X'] });
+  });
+
+  it('stays fast when every column has its own CO weights', () => {
+    const cos = [co(1, []), co(2, []), co(3, [])];
+    const cols = (t: string) =>
+      Array.from({ length: 15 }, (_, i) => {
+        const k = i + t.charCodeAt(0);
+        return { id: `${t}${i}`, label: `${t}${i}`, maxScore: 37.5 + (i % 5) * 2.5, coIds: ['co1', 'co2', 'co3'], coWeights: { co1: 0.21 + (k % 37) / 100, co2: 0.3 + (k % 23) / 100, co3: 0.11 + (k % 19) / 100 } };
+      });
+    const terms: ObeTerms = { PRELIM: { columns: cols('p') }, MIDTERM: { columns: cols('m') }, FINAL: { columns: cols('f') } };
+    const students = Array.from({ length: 50 }, (_, s) => ({
+      id: `s${s}`,
+      scores: Object.fromEntries(['p', 'm', 'f'].flatMap((t) => cols(t).map((c, i) => [c.id, String(((s * 7 + i * 3) % 75) / 2)]))),
+    }));
+    const start = performance.now();
+    computeObe(cfg(cos), terms, students);
+    expect(performance.now() - start).toBeLessThan(250); // ~430 ms when every sum was normalised with a gcd
+  });
+});
