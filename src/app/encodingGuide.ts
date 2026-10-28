@@ -2,7 +2,7 @@
 // values in Mastersoft's order. Shared by the printable/PDF guide and the .xlsx export.
 import * as XLSX from 'xlsx';
 import type { Status, Term } from '../engine';
-import { assessmentTotals, duplicateStudentIds, formatPoint, sameIdAs, termOutcome, termSetupIssues } from './gradebook';
+import { assessmentTotals, duplicateStudentIds, formatPoint, reverseOutcome, sameIdAs, termOutcome, termSetupIssues } from './gradebook';
 import { subjectTypeLabel, TERM_LABEL } from './labels';
 import type { ClassRecord, Student } from './types';
 
@@ -128,5 +128,108 @@ export function guideWorkbook(g: Guide): Uint8Array {
 
 export function guideFileName(record: ClassRecord, term: Term, ext: 'xlsx' | 'pdf'): string {
   const name = [record.subjectCode, record.section, TERM_LABEL[term], 'Encoding Guide'].filter(Boolean).join(' ');
+  return `${name.replace(/[\\/:*?"<>|]+/g, '-')}.${ext}`;
+}
+
+export interface ReverseGuideRow {
+  no: number;
+  studentId: string;
+  name: string;
+  /** What the teacher entered: "90" or "Point 1.5". */
+  target: string;
+  /** The same mark is encoded for both components in all three terms. */
+  mark?: number;
+  predictedFr?: number;
+  point?: string;
+  /** Why the row has no marks yet (no target, or a target that can't be reached). */
+  problem?: string;
+  notes: string[];
+}
+
+export interface ReverseGuide {
+  title: string;
+  classLine: string;
+  /** Total Marks to set in Mastersoft for every term and both components. */
+  total: number;
+  rows: ReverseGuideRow[];
+}
+
+const REVERSE_TOTAL = 100;
+
+/** Encoding Guide for Final Rating Only mode: one set of marks that serves all three terms. */
+export function buildReverseGuide(record: ClassRecord): ReverseGuide {
+  const duplicates = duplicateStudentIds(record.students);
+  const rows = mastersoftOrder(record.students).map((s, i): ReverseGuideRow => {
+    const t = s.reverse;
+    const target = !t ? '' : t.kind === 'transmuted' ? t.grade.trim() : t.point === '' ? '' : `Point ${formatPoint(Number(t.point))}${t.transmuted.trim() ? ` (${t.transmuted.trim()})` : ''}`;
+    const row: ReverseGuideRow = { no: i + 1, studentId: s.studentId, name: s.name, target, notes: [] };
+    if (sameIdAs(duplicates, s).length > 0) row.notes.push('Duplicate Student ID');
+    if (record.students.some((x) => x.mastersoft) && !s.mastersoft) row.notes.push('Not in the Mastersoft list');
+    const o = reverseOutcome(record, s);
+    if (o.kind === 'empty') row.problem = 'Enter a target';
+    else if (o.kind === 'invalid') row.problem = o.message;
+    else {
+      Object.assign(row, { mark: o.solved.mark, predictedFr: o.rating.grade, point: formatPoint(o.rating.point.point) });
+      if (o.rating.grade !== o.solved.transmuted) row.notes.push(`Forward check gives ${o.rating.grade}, not ${o.solved.transmuted}`);
+      if (!o.rating.point.verified) row.notes.push('Unverified point grade (D31/D32)');
+    }
+    return row;
+  });
+  return {
+    title: 'Final Rating Only Encoding Guide',
+    classLine: [record.subjectCode, record.subjectName, record.section, subjectTypeLabel(record.subjectType)].filter(Boolean).join(' · '),
+    total: REVERSE_TOTAL,
+    rows,
+  };
+}
+
+export const reverseGuideHeaders = (g: ReverseGuide) => [
+  '#',
+  'Student ID',
+  'Student Name',
+  'Target FR',
+  `CS Marks / ${g.total}`,
+  `WE Marks / ${g.total}`,
+  'Predicted FR',
+  'Point Grade',
+  'Notes',
+];
+
+/** Column values for one row, as printed and exported. */
+export function reverseGuideCells(row: ReverseGuideRow): (string | number)[] {
+  return [
+    row.no,
+    row.studentId,
+    row.name,
+    row.target,
+    row.mark ?? '',
+    row.mark ?? '',
+    row.predictedFr ?? '',
+    row.point ?? '',
+    [row.problem, ...row.notes].filter(Boolean).join('; '),
+  ];
+}
+
+export function reverseGuideWorkbook(g: ReverseGuide): Uint8Array {
+  const aoa: (string | number | null)[][] = [
+    [g.title],
+    [g.classLine],
+    [],
+    ['Mastersoft Assessment Component'],
+    ['Prelim, Midterm and Final – Class Standing', 'Total Marks', g.total],
+    ['Prelim, Midterm and Final – Written Exam', 'Total Marks', g.total],
+    [],
+    reverseGuideHeaders(g),
+    ...g.rows.map(reverseGuideCells),
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{ wch: 5 }, { wch: 16 }, { wch: 34 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 11 }, { wch: 48 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Final Rating Guide');
+  return XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as Uint8Array;
+}
+
+export function reverseGuideFileName(record: ClassRecord, ext: 'xlsx' | 'pdf'): string {
+  const name = [record.subjectCode, record.section, 'Final Rating Only Encoding Guide'].filter(Boolean).join(' ');
   return `${name.replace(/[\\/:*?"<>|]+/g, '-')}.${ext}`;
 }

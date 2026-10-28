@@ -10,6 +10,7 @@ import {
   readWorkbook,
   suggestMapping,
   toTemplate,
+  TEMPLATES_KEY,
   type ImportMapping,
   type ImportTemplate,
   type MergeScoresResult,
@@ -24,7 +25,6 @@ import { Button } from './ui/button';
 import { Dialog, DialogContent } from './ui/dialog';
 import { Input, Label, Select } from './ui/input';
 
-const TEMPLATES_KEY = 'importTemplates';
 
 /** Smart Excel import (D7): sheet → name/ID columns → CS/WE columns and max scores. */
 export function ExcelImportDialog({ term, open, onOpenChange }: { term: Term; open: boolean; onOpenChange: (o: boolean) => void }) {

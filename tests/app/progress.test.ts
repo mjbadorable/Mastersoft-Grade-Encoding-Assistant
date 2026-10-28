@@ -1,6 +1,7 @@
 // Workflow progress per term (made-up students).
 import { describe, expect, it } from 'vitest';
-import { nextProblem, termProgress } from '../../src/app/progress';
+import { backupFingerprint } from '../../src/app/backup';
+import { classOverview, nextProblem, termProgress } from '../../src/app/progress';
 import type { ClassRecord, Student, TermSetup } from '../../src/app/types';
 
 const setup: TermSetup = {
@@ -61,5 +62,36 @@ describe('nextProblem', () => {
     expect(nextProblem(problems, { row: 1, column: 0 })).toEqual(problems[1]);
     expect(nextProblem(problems, { row: 2, column: 1 })).toEqual(problems[0]);
     expect(nextProblem([], { row: 0, column: 0 })).toBeUndefined();
+  });
+});
+
+describe('classOverview', () => {
+  const done = [s('a', { q: '18', e: '50' }), s('b', { q: '15', e: '40' })];
+
+  it('reports students, each term and the duplicate count', () => {
+    const r = record([...done, { ...s('c', {}), studentId: 'X1' }, { ...s('d', {}), studentId: 'x1' }]);
+    const o = classOverview(r);
+    expect(o.students).toBe(4);
+    expect(o.duplicateIds).toBe(2);
+    expect(o.terms.PRELIM).toEqual(termProgress(r, 'PRELIM'));
+    expect(o.terms.MIDTERM.setupIssues.length).toBeGreaterThan(0);
+  });
+
+  it('needs a backup until the class matches its last backup', () => {
+    const r = record(done);
+    expect(classOverview(r).needsBackup).toBe(true);
+    expect(classOverview(r, 'stale').needsBackup).toBe(true);
+    expect(classOverview(r, backupFingerprint(r)).needsBackup).toBe(false);
+    const edited = { ...r, students: [...r.students, s('c', {})] };
+    expect(classOverview(edited, backupFingerprint(r)).needsBackup).toBe(true);
+  });
+
+  it('does not ask for a backup of a class with no students', () => {
+    expect(classOverview(record([])).needsBackup).toBe(false);
+  });
+
+  it('does not count a change of updatedAt as a change to back up', () => {
+    const r = record(done);
+    expect(classOverview({ ...r, updatedAt: 99 }, backupFingerprint(r)).needsBackup).toBe(false);
   });
 });

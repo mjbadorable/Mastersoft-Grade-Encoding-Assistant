@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildGuide, guideCells } from '../../src/app/encodingGuide';
 import { duplicateStudentIds, finalOutcome, formatPoint, parseScore, termOutcome, termSetupIssues } from '../../src/app/gradebook';
-import { termProgress } from '../../src/app/progress';
+import { classOverview, termProgress } from '../../src/app/progress';
 import { mergeMastersoftRows, planExport } from '../../src/app/mastersoftFile';
 import type { ClassRecord, MastersoftRow, Student, TermSetup } from '../../src/app/types';
 import { computeTerm, finalRating, pointGrade, rules, scale, solveReverse, transmute, type Term } from '../../src/engine';
@@ -209,5 +209,19 @@ describe('REQ-21 / REQ-23: reports', () => {
     expect(formatPoint(3)).toBe('3.0');
     expect(formatPoint(1.8)).toBe('1.8');
     expect(formatPoint(pointGrade(100, 'transcript').point)).toBe('1.0');
+  });
+});
+
+describe('Readiness across classes', () => {
+  it('TC-032: the overview shows missing setup and progress for every class', () => {
+    const ready = record([studentWithTermGrades('A', { PRELIM: 80, MIDTERM: 80, FINAL: 80 })]);
+    const noSetup = { ...record([studentWithTermGrades('B', { PRELIM: 80, MIDTERM: 80, FINAL: 80 })]), id: 'd', terms: { ...ready.terms, MIDTERM: { csMode: 'RAW_SUM' as const, categories: [], columns: [] } } };
+    const empty = { ...record([]), id: 'e' };
+    const [a, b, c] = [ready, noSetup, empty].map((r) => classOverview(r));
+    expect(a!.terms.PRELIM.complete).toBe(true);
+    expect(b!.terms.MIDTERM.setupIssues.length).toBeGreaterThan(0);
+    expect(b!.terms.PRELIM.complete).toBe(true);
+    expect(c!.students).toBe(0);
+    expect(c!.terms.PRELIM.complete).toBe(false);
   });
 });

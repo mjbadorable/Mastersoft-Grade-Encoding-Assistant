@@ -2,6 +2,9 @@ import { ShieldCheck } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { TERM_LABEL } from './app/labels';
 import { useActiveClass, useStore } from './app/store';
+import { AllClassesOverview } from './components/AllClassesOverview';
+import { BackupReminder } from './components/BackupReminder';
+import { DemoBanner } from './components/DemoBanner';
 import { BackupRestore } from './components/BackupRestore';
 import { BreakdownDrawer } from './components/BreakdownDrawer';
 import { ClassDialog } from './components/ClassDialog';
@@ -20,7 +23,7 @@ import { Button } from './components/ui/button';
 import { rules } from './engine';
 
 export function App() {
-  const { loaded, noticeSeen, acceptNotice, load, view } = useStore();
+  const { loaded, noticeSeen, acceptNotice, load, view, loadDemoClass } = useStore();
   const active = useActiveClass();
   const [privacyOpen, setPrivacyOpen] = useState(false);
   const [newClass, setNewClass] = useState(false);
@@ -34,6 +37,7 @@ export function App() {
 
   let content;
   if (view === 'TABLE') content = <TransmutationReference />;
+  else if (view === 'OVERVIEW') content = <AllClassesOverview />;
   else if (!active)
     content = (
       <div className="m-auto w-full max-w-3xl px-6">
@@ -57,6 +61,9 @@ export function App() {
           <Button variant="outline" onClick={() => setNewClass(true)}>
             Create a class by hand
           </Button>
+          <Button variant="outline" onClick={loadDemoClass}>
+            Load Sample Demo Class
+          </Button>
         </div>
       </div>
     );
@@ -72,7 +79,7 @@ export function App() {
         {active && (
           <span className="truncate text-sm text-white/85">
             {active.subjectCode} {active.subjectName && `– ${active.subjectName}`} {active.section && `· ${active.section}`}
-            {view !== 'TABLE' && view !== 'SUMMARY' && view !== 'REVERSE' && view !== 'OBE' && ` ·${TERM_LABEL[view]}`}
+            {view !== 'TABLE' && view !== 'OVERVIEW' && view !== 'SUMMARY' && view !== 'REVERSE' && view !== 'OBE' && ` ·${TERM_LABEL[view]}`}
           </span>
         )}
         <span className="ml-auto" />
@@ -87,6 +94,8 @@ export function App() {
         </button>
       </header>
       <SaveErrorBanner />
+      <BackupReminder />
+      {active?.demo && <DemoBanner key={active.id} classId={active.id} />}
       <div className="flex min-h-0 flex-1">
         <Sidebar onPrivacy={() => setPrivacyOpen(true)} />
         <main className="flex min-w-0 flex-1 flex-col overflow-hidden">{content}</main>

@@ -12,6 +12,8 @@ export interface StepAction {
 
 interface Step {
   title: string;
+  /** Label in the step strip. */
+  short: string;
   detail: ReactNode;
   done: boolean;
   actions: StepAction[];
@@ -53,6 +55,7 @@ export function WorkflowGuide({ progress: p, totals, actions }: Props) {
   const steps: Step[] = [
     {
       title: 'Add students',
+      short: 'Students',
       done: p.students > 0 && p.duplicateIds === 0,
       detail:
         p.duplicateIds > 0 ? (
@@ -66,12 +69,14 @@ export function WorkflowGuide({ progress: p, totals, actions }: Props) {
     },
     {
       title: 'Set up columns',
+      short: 'Columns',
       done: p.setupIssues.length === 0,
       detail: p.setupIssues.length === 0 ? `${p.csColumns} Class Standing · ${p.weColumns} Written Exam column${p.weColumns === 1 ? '' : 's'}` : p.setupIssues[0],
       actions: actions.columns,
     },
     {
       title: 'Enter scores',
+      short: 'Scores',
       done: p.complete,
       detail:
         p.students === 0 || p.setupIssues.length > 0 ? (
@@ -87,6 +92,7 @@ export function WorkflowGuide({ progress: p, totals, actions }: Props) {
     },
     {
       title: 'Encode in Mastersoft',
+      short: 'Encode',
       done: false,
       detail: p.complete ? `Set Total Marks to CS ${totals.cs} and WE ${totals.we}, then upload or copy the marks.` : 'Ready once every student has a grade or a status.',
       actions: actions.encode,
@@ -96,7 +102,7 @@ export function WorkflowGuide({ progress: p, totals, actions }: Props) {
 
   if (hidden) {
     return (
-      <div className="flex items-center gap-3 border-b border-slate-200 bg-white px-4 py-1.5 text-xs text-slate-600">
+      <div className="flex items-center gap-3 border-b border-slate-200 bg-slate-50/80 px-4 py-1.5 text-xs text-slate-600">
         <span className="font-medium">
           Step {current + 1} of 4: {steps[current]?.title}
         </span>
@@ -108,42 +114,32 @@ export function WorkflowGuide({ progress: p, totals, actions }: Props) {
   }
 
   return (
-    <div className="flex items-start gap-2 border-b border-slate-200 bg-white px-4 py-2.5">
-      <ol className="grid flex-1 grid-cols-2 gap-3 xl:grid-cols-4" aria-label="Encoding steps">
+    <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50/80 px-4 py-2">
+      <ol className="flex flex-1 flex-wrap items-center gap-x-3 gap-y-1.5" aria-label="Encoding steps">
         {steps.map((s, i) => {
           const isCurrent = i === current;
           return (
-            <li
-              key={s.title}
-              aria-current={isCurrent ? 'step' : undefined}
-              className={cn(
-                'relative flex flex-col gap-1 rounded-lg border px-3 py-2',
-                isCurrent ? 'border-brand/50 bg-brand/[0.04] shadow-sm ring-1 ring-brand/20' : 'border-slate-200',
-                s.done && 'bg-emerald-50/40',
-              )}
-            >
-              <div className="flex items-center gap-2">
-                <span
-                  className={cn(
-                    'flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold',
-                    s.done ? 'bg-emerald-600 text-white' : isCurrent ? 'bg-brand text-white' : 'bg-slate-200 text-slate-600',
-                  )}
-                >
-                  {s.done ? <Check className="size-3.5" /> : i + 1}
-                </span>
-                <span className={cn('text-sm font-semibold', !s.done && !isCurrent && 'text-slate-500')}>{s.title}</span>
-                {isCurrent && <span className="ml-auto rounded-full bg-brand px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">Next</span>}
-              </div>
-              <p className="text-xs leading-snug text-slate-600">{s.detail}</p>
-              {isCurrent && s.actions.length > 0 && (
-                <div className="mt-auto flex flex-wrap gap-1.5">
+            <li key={s.title} aria-current={isCurrent ? 'step' : undefined} className="flex flex-wrap items-center gap-2">
+              <span
+                title={s.title}
+                className={cn(
+                  'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs',
+                  isCurrent ? 'bg-brand font-semibold text-white' : s.done ? 'text-slate-500' : 'text-slate-400',
+                )}
+              >
+                {s.done && <Check className="size-3 text-emerald-600" aria-label="Done" />}
+                {i + 1}. {s.short}
+              </span>
+              {isCurrent && (
+                <>
+                  <span className="text-xs text-slate-600">{s.detail}</span>
                   {s.actions.map((a, j) => (
-                    <Button key={a.label} size="sm" variant={isCurrent && j === 0 ? 'default' : 'outline'} className="h-7 px-2 text-xs" onClick={a.onClick}>
+                    <Button key={a.label} size="sm" variant={j === 0 ? 'default' : 'outline'} className="h-7 px-2 text-xs" onClick={a.onClick}>
                       {a.icon}
                       {a.label}
                     </Button>
                   ))}
-                </div>
+                </>
               )}
             </li>
           );

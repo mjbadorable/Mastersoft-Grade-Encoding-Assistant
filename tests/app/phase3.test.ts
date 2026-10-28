@@ -2,11 +2,22 @@
 // All students here are made up.
 import { describe, expect, it } from 'vitest';
 import * as XLSX from 'xlsx';
-import { BackupError, backupFingerprint, parseBackup, serializeBackup } from '../../src/app/backup';
-import { buildGuide, guideCells, guideWorkbook, mastersoftOrder } from '../../src/app/encodingGuide';
-import { applyMapping, fromTemplate, mergeImportedScores, readWorkbook, suggestMapping, toTemplate, type Grid } from '../../src/app/excelImport';
+import {
+  BackupError,
+  backupFingerprint,
+  backupReminderDue,
+  parseBackup,
+  restoreTemplates,
+  restoreWorkspaceClasses,
+  serializeBackup,
+  serializeWorkspaceBackup,
+  workspaceBackupFileName,
+} from '../../src/app/backup';
+import { buildGuide, buildReverseGuide, guideCells, guideWorkbook, mastersoftOrder, reverseGuideCells, reverseGuideWorkbook } from '../../src/app/encodingGuide';
+import { applyMapping, fromTemplate, mergeImportedScores, readWorkbook, suggestMapping, toTemplate, type Grid, type ImportTemplate } from '../../src/app/excelImport';
 import { termOutcome } from '../../src/app/gradebook';
 import { obeReport, vpaaForRecord } from '../../src/app/obe';
+import { solveReverse } from '../../src/engine';
 import type { ClassRecord, Student, TermSetup } from '../../src/app/types';
 
 const xlsx = (sheets: Record<string, unknown[][]>) => {
@@ -168,12 +179,19 @@ describe('Encoding Guide', () => {
   });
 });
 
+/** parseBackup for a one-class file. */
+const parseSingle = (text: string) => {
+  const b = parseBackup(text);
+  if (b.type !== 'single') throw new Error('expected a single-class backup');
+  return b;
+};
+
 describe('backup and restore', () => {
   it('round-trips a class record exactly', () => {
     const g = grid();
     const m = suggestMapping(g);
     const r = mergeImportedScores(record([]), 'PRELIM', m, applyMapping(g, m).rows, make).record;
-    const restored = parseBackup(serializeBackup(r, new Date('2026-10-18T00:00:00Z')));
+    const restored = parseSingle(serializeBackup(r, new Date('2026-10-18T00:00:00Z')));
     expect(restored.classRecord).toEqual(r);
     expect(restored.exportedAt).toBe('2026-10-18T00:00:00.000Z');
   });
@@ -189,7 +207,7 @@ describe('backup and restore', () => {
   it('repairs the OBE setup of an older or damaged backup, so the OBE views still open', () => {
     const file = JSON.parse(serializeBackup(record([]))) as { classRecord: Record<string, unknown> };
     file.classRecord.obe = { cos: [{ id: 'co1', code: 'CO1' }], los: [{ id: 'l1', code: 'LO 1.1', term: 'PRELIM' }] };
-    const restored = parseBackup(JSON.stringify(file)).classRecord;
+    const restored = parseSingle(JSON.stringify(file)).classRecord;
     expect(restored.obe!.los[0]!.coIds).toEqual([]);
     expect(() => obeReport(restored)).not.toThrow();
     expect(() => vpaaForRecord(restored, restored.obe!)).not.toThrow();
@@ -199,11 +217,167 @@ describe('backup and restore', () => {
     const g = grid();
     const m = suggestMapping(g);
     const r = mergeImportedScores(record([]), 'PRELIM', m, applyMapping(g, m).rows, make).record;
-    const restored = parseBackup(serializeBackup(r)).classRecord;
+    const restored = parseSingle(serializeBackup(r)).classRecord;
     expect(backupFingerprint({ ...r, updatedAt: 123 })).toBe(backupFingerprint({ ...r, updatedAt: 456 }));
     expect(backupFingerprint(restored)).toBe(backupFingerprint(r));
     const s0 = r.students[0]!;
     const edited = { ...r, students: [{ ...s0, scores: { ...s0.scores, [r.terms.PRELIM.columns[0]!.id]: '1' } }, ...r.students.slice(1)] };
     expect(backupFingerprint(edited)).not.toBe(backupFingerprint(r));
+  });
+});
+
+describe('workspace backup', () => {
+  const cls = (id: string, code: string, students: Student[] = []): ClassRecord => ({ ...record(students), id, subjectCode: code });
+  const stu = (id: string, name: string): Student => ({ id, studentId: id, name, scores: {}, statuses: {} });
+  const tpl = (name: string, header = 'Quiz 1'): ImportTemplate => ({
+    name,
+    headerRow: 2,
+    maxRow: 3,
+    idHeader: 'Student ID',
+    nameHeader: 'Name of Student',
+    columns: [{ header, component: 'CS', maxScore: 20 }],
+  });
+  const workspace = (text: string) => {
+    const b = parseBackup(text);
+    if (b.type !== 'workspace') throw new Error('expected a workspace backup');
+    return b;
+  };
+  const A = cls('a', 'CHEM1', [stu('s1', 'Ann')]);
+  const B = cls('b', 'BIO2', [stu('s2', 'Ben'), stu('s3', 'Cy')]);
+
+  it('writes the documented file schema', () => {
+    const file = JSON.parse(serializeWorkspaceBackup([A, B], { exportedAt: 1_700_000_000_000, templates: [tpl('t1')] })) as Record<string, unknown>;
+    expect(Object.keys(file)).toEqual(['app', 'format', 'type', 'exportedAt', 'classes', 'templates']);
+    expect(file).toMatchObject({ app: 'mastersoft-grade-encoding', format: 1, type: 'workspace', exportedAt: 1_700_000_000_000 });
+    expect(file.classes).toHaveLength(2);
+    expect(typeof (JSON.parse(serializeWorkspaceBackup([A])) as { exportedAt: unknown }).exportedAt).toBe('number');
+    expect(workspaceBackupFileName(new Date('2026-10-28T10:00:00Z'))).toBe('Mastersoft workspace backup 2026-10-28.json');
+  });
+
+  it('round-trips every class and the import templates exactly', () => {
+    const templates = [tpl('Chem quizzes'), tpl('Bio labs', 'Lab 1')];
+    const parsed = workspace(serializeWorkspaceBackup([A, B], { templates, exportedAt: 5 }));
+    expect(parsed.classes).toEqual([A, B]);
+    expect(parsed.templates).toEqual(templates);
+    expect(parsed.exportedAt).toBe(5);
+    // A saved template still maps the same headers after the round trip.
+    const g = grid();
+    const { mapping, missing } = fromTemplate(g, parsed.templates![0]!);
+    expect(missing).toEqual([]);
+    expect(mapping.columns[0]).toMatchObject({ header: 'Quiz 1', maxScore: 20 });
+  });
+
+  it('leaves templates out when none are given, and old single-class files still load as single', () => {
+    const file = JSON.parse(serializeWorkspaceBackup([A])) as Record<string, unknown>;
+    expect('templates' in file).toBe(false);
+    expect(workspace(serializeWorkspaceBackup([A])).templates).toBeUndefined();
+    const single = parseBackup(serializeBackup(A));
+    expect(single.type).toBe('single');
+  });
+
+  it('rejects damaged workspace files', () => {
+    const base = JSON.parse(serializeWorkspaceBackup([A, B], { templates: [tpl('t')] })) as { classes: Record<string, unknown>[]; templates: Record<string, unknown>[]; exportedAt: unknown };
+    const bad = (edit: (f: typeof base) => void) => {
+      const f = structuredClone(base);
+      edit(f);
+      return () => parseBackup(JSON.stringify(f));
+    };
+    expect(bad((f) => (f.classes = []))).toThrow(/no classes/);
+    expect(bad((f) => (f.classes[1]!.id = 'a'))).toThrow(/same id/);
+    expect(bad((f) => (f.classes[0]!.students = 'x'))).toThrow(/student list/);
+    expect(bad((f) => (f.templates[0]!.columns = [{ header: 1 }]))).toThrow(/import template is invalid/);
+    expect(bad((f) => (f.exportedAt = 'yesterday'))).toThrow(/no backup time/);
+  });
+
+  it('merge keeps current classes, updates matching ids and adds new ones', () => {
+    const current = [cls('a', 'CHEM1', [stu('old', 'Old')]), cls('c', 'MATH3'), cls('d', 'PHY4')];
+    const incoming = [A, B];
+    const merged = restoreWorkspaceClasses(current, incoming, 'merge');
+    expect(merged.map((c) => c.id)).toEqual(['a', 'c', 'd', 'b']);
+    expect(merged[0]).toBe(A); // updated in place by the backup
+    expect(merged[1]).toBe(current[1]);
+    expect(merged[3]).toBe(B);
+  });
+
+  it('replace leaves exactly the backup classes', () => {
+    const current = [cls('a', 'CHEM1', [stu('old', 'Old')]), cls('c', 'MATH3')];
+    expect(restoreWorkspaceClasses(current, [A, B], 'replace').map((c) => c.id)).toEqual(['a', 'b']);
+  });
+
+  it('merges templates by name (backup wins) or replaces them; no templates in the file keeps yours', () => {
+    const mine = [tpl('shared', 'Mine'), tpl('only mine')];
+    const theirs = [tpl('shared', 'Theirs'), tpl('only theirs')];
+    const merged = restoreTemplates(mine, theirs, 'merge');
+    expect(merged.map((t) => t.name).sort()).toEqual(['only mine', 'only theirs', 'shared']);
+    expect(merged.find((t) => t.name === 'shared')!.columns[0]!.header).toBe('Theirs');
+    expect(restoreTemplates(mine, theirs, 'replace')).toEqual(theirs);
+    expect(restoreTemplates(mine, undefined, 'replace')).toBe(mine);
+    expect(restoreTemplates(mine, undefined, 'merge')).toBe(mine);
+  });
+});
+
+describe('backup reminder', () => {
+  const base = { students: 12, sessionBackupTaken: false, dismissed: false, armed: true };
+
+  it('shows only when there is work, no backup yet this session, and it was not dismissed', () => {
+    expect(backupReminderDue(base)).toBe(true);
+    expect(backupReminderDue({ ...base, students: 0 })).toBe(false);
+    expect(backupReminderDue({ ...base, sessionBackupTaken: true })).toBe(false);
+    expect(backupReminderDue({ ...base, dismissed: true })).toBe(false);
+  });
+
+  it('waits for a class switch or the Overview (armed) before showing', () => {
+    expect(backupReminderDue({ ...base, armed: false })).toBe(false);
+  });
+});
+
+describe('Final Rating Only Encoding Guide', () => {
+  const ms = (order: number, id: string) => ({ order, studentId: id, studentName: id, subject: '', campus: '', section: '', semester: '' });
+  const student = (id: string, reverse?: Student['reverse'], order?: number): Student => ({
+    id,
+    studentId: id,
+    name: `Name ${id}`,
+    scores: {},
+    statuses: {},
+    reverse,
+    mastersoft: order === undefined ? undefined : ms(order, id),
+  });
+  const guide = buildReverseGuide(
+    record([
+      student('B', { kind: 'transmuted', grade: '90' }, 1),
+      student('A', { kind: 'point', point: '1.5', transmuted: '' }, 0),
+      student('C', { kind: 'transmuted', grade: '40' }, 2),
+      student('D', undefined, 3),
+      student('hand', { kind: 'transmuted', grade: '80' }),
+    ]),
+  );
+
+  it('totals 100 and lists students in Mastersoft order, hand-added ones last', () => {
+    expect(guide.total).toBe(100);
+    expect(guide.rows.map((r) => r.studentId)).toEqual(['A', 'B', 'C', 'D', 'hand']);
+  });
+
+  it('shows the target, the same solved mark for CS and WE, and the forward check', () => {
+    const mark = solveReverse({ kind: 'transmuted', grade: 90 }).mark;
+    const b = guide.rows[1]!;
+    expect(reverseGuideCells(b).slice(0, 8)).toEqual([2, 'B', 'Name B', '90', mark, mark, 90, '1.8']);
+    expect(guide.rows[0]!.target).toBe('Point 1.5');
+    expect(guide.rows[0]!.mark).toBeDefined();
+  });
+
+  it('explains rows with no marks and flags students outside the Mastersoft list', () => {
+    expect(guide.rows[2]!.problem).toBeTruthy();
+    expect(guide.rows[2]!.mark).toBeUndefined();
+    expect(guide.rows[3]!.problem).toBe('Enter a target');
+    expect(guide.rows[4]!.notes).toContain('Not in the Mastersoft list');
+  });
+
+  it('exports the same table to .xlsx', () => {
+    const wb = XLSX.read(reverseGuideWorkbook(guide), { type: 'array' });
+    const rows = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[wb.SheetNames[0]!]!, { header: 1, defval: null });
+    expect(rows[4]?.slice(1, 3)).toEqual(['Total Marks', 100]);
+    expect(rows[5]?.slice(1, 3)).toEqual(['Total Marks', 100]);
+    expect(rows[7]).toEqual(['#', 'Student ID', 'Student Name', 'Target FR', 'CS Marks / 100', 'WE Marks / 100', 'Predicted FR', 'Point Grade', 'Notes']);
+    expect(rows[9]?.slice(0, 5)).toEqual([2, 'B', 'Name B', '90', solveReverse({ kind: 'transmuted', grade: 90 }).mark]);
   });
 });

@@ -9,6 +9,9 @@ const pct = (bp: number) => String(Math.round((bp / BP) * 10000) / 100);
 
 export const SUBJECT_TYPES: SubjectType[] = ['LEC', 'LAB', 'COMPOSITE'];
 const SUBJECT_NAME: Record<SubjectType, string> = { LEC: 'Lecture', LAB: 'Laboratory', COMPOSITE: 'Composite' };
+/** "50/50 CS/WE" etc., from the rules file. */
+export const subjectSplitLabel = (t: SubjectType) => `${pct(rules.weightBp[t].cs)}/${pct(rules.weightBp[t].we)} CS/WE`;
+export const subjectTypeName = (t: SubjectType) => SUBJECT_NAME[t];
 export const subjectTypeLabel = (t: SubjectType) =>
   `${SUBJECT_NAME[t]} ${pct(rules.weightBp[t].cs)}/${pct(rules.weightBp[t].we)}`;
 

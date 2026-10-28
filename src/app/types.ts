@@ -75,7 +75,9 @@ export interface ClassRecord {
   mastersoftSession?: string;
   /** Syllabus outcomes for OBE attainment; unset until the teacher sets them up. */
   obe?: ObeConfig;
+  /** The built-in sample class for exploring the app (see demoClass.ts). */
+  demo?: boolean;
   updatedAt: number;
 }
 
-export type View = Term | 'SUMMARY' | 'OBE' | 'REVERSE' | 'TABLE';
+export type View = Term | 'OVERVIEW' | 'SUMMARY' | 'OBE' | 'REVERSE' | 'TABLE';

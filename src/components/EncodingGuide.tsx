@@ -10,11 +10,9 @@ import { cn } from '../lib/utils';
 import { Button } from './ui/button';
 import { Dialog, DialogContent } from './ui/dialog';
 
-/** Encoding Guide per term (D13): preview, print / save as PDF, or download .xlsx. */
-export function EncodingGuideDialog({ record, term, open, onOpenChange }: { record: ClassRecord; term: Term; open: boolean; onOpenChange: (o: boolean) => void }) {
+/** Opens the browser's print dialog once the print copy of a guide is on the page. */
+export function usePrinting() {
   const [printing, setPrinting] = useState(false);
-  const guide = open ? buildGuide(record, term) : null;
-
   useEffect(() => {
     if (!printing) return;
     const done = () => setPrinting(false);
@@ -26,6 +24,13 @@ export function EncodingGuideDialog({ record, term, open, onOpenChange }: { reco
       window.removeEventListener('afterprint', done);
     };
   }, [printing]);
+  return [printing, setPrinting] as const;
+}
+
+/** Encoding Guide per term (D13): preview, print / save as PDF, or download .xlsx. */
+export function EncodingGuideDialog({ record, term, open, onOpenChange }: { record: ClassRecord; term: Term; open: boolean; onOpenChange: (o: boolean) => void }) {
+  const [printing, setPrinting] = usePrinting();
+  const guide = open ? buildGuide(record, term) : null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

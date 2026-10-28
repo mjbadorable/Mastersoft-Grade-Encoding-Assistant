@@ -99,12 +99,24 @@ export function vpaaForRecord(record: ClassRecord, obe: ObeConfig): VpaaSheet {
   );
 }
 
-/** CO and LO codes a column is tagged with, in syllabus order (tags of deleted outcomes are skipped). */
+/**
+ * CO and LO codes a column is tagged with, in syllabus order (tags of deleted outcomes are skipped).
+ * `coText` is how the COs read in a header: "CO1 · CO2" for an equal split, "CO1 40% · CO2 60%" for custom weights.
+ */
 export function columnTags(obe: ObeConfig | undefined, column: Column) {
-  if (!obe) return { cos: [], los: [] };
+  if (!obe) return { cos: [], los: [], coText: '' };
+  const tagged = obe.cos.filter((c) => column.coIds?.includes(c.id));
+  // Same reading as the engine: a missing or invalid weight counts as 0, and no weight at all means equal.
+  const weights = tagged.map((c) => {
+    const w = column.coWeights?.[c.id];
+    return typeof w === 'number' && Number.isFinite(w) && w >= 0 ? w : 0;
+  });
+  const total = weights.reduce((a, b) => a + b, 0);
+  const custom = tagged.length >= 2 && total > 0;
   return {
-    cos: obe.cos.filter((c) => column.coIds?.includes(c.id)).map((c) => c.code),
+    cos: tagged.map((c) => c.code),
     los: obe.los.filter((l) => column.loIds?.includes(l.id)).map((l) => l.code),
+    coText: tagged.map((c, i) => (custom ? `${c.code} ${Math.round((weights[i]! / total) * 1000) / 10}%` : c.code)).join(' · '),
   };
 }
 

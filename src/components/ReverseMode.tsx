@@ -1,10 +1,14 @@
-import { CheckCircle2, UserPlus } from 'lucide-react';
+import { BookOpenCheck, CheckCircle2, FileDown, UserPlus } from 'lucide-react';
+import { useState } from 'react';
 import { formatPoint, reverseOutcome } from '../app/gradebook';
 import { subjectTypeLabel } from '../app/labels';
 import { useStore } from '../app/store';
 import type { ClassRecord, ReverseInput } from '../app/types';
 import { rules } from '../engine';
 import { cn } from '../lib/utils';
+import { MastersoftExportDialog } from './MastersoftDialogs';
+import { ReverseGuideDialog } from './ReverseGuide';
+import { TotalCard } from './TermGradebook';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 
@@ -13,6 +17,8 @@ const POINT_OPTIONS = [...new Set(rules.transcriptPointGrades.map((r) => r.point
 /** Final Rating Only mode, internally "reverse mode" (D11, D28, D38): target Final Rating → the marks to encode in all 3 terms. */
 export function ReverseMode({ record }: { record: ClassRecord }) {
   const { setReverse, setStudentField, addStudent } = useStore();
+  const [guideOpen, setGuideOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const th = 'border-b border-slate-200 bg-slate-100 px-2 py-2 text-left text-xs font-semibold text-slate-600';
   const td = 'border-b border-slate-200 px-2 py-1';
   const input = 'h-8 rounded border border-slate-300 bg-white px-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20';
@@ -38,13 +44,19 @@ export function ReverseMode({ record }: { record: ClassRecord }) {
           <br />
           Assessment Component
         </div>
-        <div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm">
-          Prelim, Midterm and Final – Class Standing Total Marks <strong className="tabular ml-1 text-lg">100</strong>
-        </div>
-        <div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm">
-          Prelim, Midterm and Final – Written Exam Total Marks <strong className="tabular ml-1 text-lg">100</strong>
+        <TotalCard label="Prelim, Midterm and Final – Class Standing" value={100} />
+        <TotalCard label="Prelim, Midterm and Final – Written Exam" value={100} />
+        <div className="ml-auto flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => setGuideOpen(true)}>
+            <BookOpenCheck /> Encoding guide
+          </Button>
+          <Button size="sm" onClick={() => setExportOpen(true)}>
+            <FileDown /> Export for Mastersoft
+          </Button>
         </div>
       </div>
+      <ReverseGuideDialog record={record} open={guideOpen} onOpenChange={setGuideOpen} />
+      <MastersoftExportDialog record={record} term="PRELIM" reverse open={exportOpen} onOpenChange={setExportOpen} />
       <div className="min-h-0 flex-1 overflow-auto bg-white">
         <table className="tabular w-full border-separate border-spacing-0 text-sm">
           <thead className="sticky top-0 z-10">

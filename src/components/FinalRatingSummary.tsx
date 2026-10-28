@@ -1,3 +1,6 @@
+import { Download } from 'lucide-react';
+import { buildBatchZip, planAllTermsExport } from '../app/mastersoftFile';
+import { downloadFile, ZIP_TYPE } from '../lib/download';
 import { finalOutcome, formatPoint, termOutcome, type FinalOutcome } from '../app/gradebook';
 import { TERM_LABEL, termWeightLabel } from '../app/labels';
 import { useStore } from '../app/store';
@@ -5,18 +8,31 @@ import type { ClassRecord } from '../app/types';
 import { rules, TERMS } from '../engine';
 import { cn } from '../lib/utils';
 import { Badge } from './ui/badge';
+import { Button } from './ui/button';
 
 export function FinalRatingSummary({ record }: { record: ClassRecord }) {
   const openDrawer = useStore((s) => s.openDrawer);
+  const batch = planAllTermsExport(record);
+  const ready = batch.files.length;
+  const blockedTitle = batch.blocked.map((b) => `${b.fileName}: ${b.reasons.join(' ')}`).join('\n');
   const th = 'border-b border-slate-200 bg-slate-100 px-3 py-2 text-left text-xs font-semibold text-slate-600';
   const td = 'border-b border-slate-200 px-3 py-1.5';
   return (
     <>
-      <div className="border-b border-slate-200 bg-white px-4 py-2.5">
-        <h2 className="text-base font-semibold">Final Rating summary</h2>
-        <p className="text-xs text-slate-500">
-          FR = {TERMS.map((t) => `${termWeightLabel(t)} ${TERM_LABEL[t]}`).join(' + ')}, rounded half-up, then the transcript point grade (below 75 = 5.0).
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-2.5">
+        <div>
+          <h2 className="text-base font-semibold">Final Rating summary</h2>
+          <p className="text-xs text-slate-500">
+            FR = {TERMS.map((t) => `${termWeightLabel(t)} ${TERM_LABEL[t]}`).join(' + ')}, rounded half-up, then the transcript point grade (below 75 = 5.0).
+          </p>
+        </div>
+        <Button
+          disabled={ready === 0}
+          title={blockedTitle || 'Download Mastersoft upload files (.zip)'}
+          onClick={() => downloadFile(buildBatchZip(batch) as BlobPart, batch.zipName, ZIP_TYPE)}
+        >
+          <Download /> {ready === batch.totalFiles ? `Download ${ready} files (.zip)` : `Download ${ready} ready files (.zip)`}
+        </Button>
       </div>
       <div className="min-h-0 flex-1 overflow-auto bg-white">
         <table className="tabular w-full border-separate border-spacing-0 text-sm">

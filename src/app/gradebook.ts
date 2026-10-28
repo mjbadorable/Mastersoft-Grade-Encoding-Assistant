@@ -8,6 +8,7 @@ import {
   GradeInputError,
   minFinalNeeded,
   roundHalfUp,
+  rules,
   solveReverse,
   sumMarks,
   TERMS,
@@ -40,10 +41,21 @@ export const weColumns = (setup: TermSetup) => setup.columns.filter((c) => c.com
 
 /** Problems with a term's column setup that block every student's grade. */
 export function termSetupIssues(setup: TermSetup): string[] {
+  return [...missingColumnIssues(setup), ...categoryIssues(setup)];
+}
+
+/** A term still needs its Class Standing or Written Exam columns. */
+export function missingColumnIssues(setup: TermSetup): string[] {
+  const issues: string[] = [];
+  if (csColumns(setup).length === 0) issues.push('Add at least one Class Standing column.');
+  if (weColumns(setup).length === 0) issues.push('Add at least one Written Exam column.');
+  return issues;
+}
+
+/** Weighted-categories mode: category weights and which column belongs to which category. */
+export function categoryIssues(setup: TermSetup): string[] {
   const issues: string[] = [];
   const cs = csColumns(setup);
-  if (cs.length === 0) issues.push('Add at least one Class Standing column.');
-  if (weColumns(setup).length === 0) issues.push('Add at least one Written Exam column.');
   if (setup.csMode === 'WEIGHTED_CATEGORIES') {
     if (setup.categories.length === 0) issues.push('Add the Class Standing categories and their weights.');
     const weightSum = sumMarks(setup.categories.map((c) => c.weightPct));
@@ -230,4 +242,156 @@ export function duplicateStudentIds(students: Student[]): Map<string, Student[]>
 /** The other students sharing this student's ID, or [] when it is unique. */
 export function sameIdAs(duplicates: Map<string, Student[]>, student: Student): Student[] {
   return (duplicates.get(idKey(student.studentId)) ?? []).filter((s) => s !== student);
+}
+
+/**
+ * Gives `to` the setup of `from`: Class Standing mode, categories and columns, each with a new
+ * id from `nid` (called in a fixed order, so a replay gets the same ids). Scores are not copied,
+ * and scores typed into the columns being replaced are removed with them.
+ */
+export function copyTermSetup(record: ClassRecord, from: Term, to: Term, nid: () => string): ClassRecord {
+  const source = record.terms[from];
+  const categoryIds = new Map(source.categories.map((c) => [c.id, nid()]));
+  const categories = source.categories.map((c) => ({ ...c, id: categoryIds.get(c.id)! }));
+  const columns = source.columns.map((c) => ({
+    ...c,
+    id: nid(),
+    categoryId: c.categoryId === undefined ? undefined : categoryIds.get(c.categoryId),
+    coIds: c.coIds && [...c.coIds],
+    loIds: c.loIds && [...c.loIds],
+    coWeights: c.coWeights && { ...c.coWeights },
+  }));
+  const replaced = new Set(record.terms[to].columns.map((c) => c.id));
+  return {
+    ...record,
+    terms: { ...record.terms, [to]: { csMode: source.csMode, categories, columns } },
+    students: replaced.size
+      ? record.students.map((s) => ({ ...s, scores: Object.fromEntries(Object.entries(s.scores).filter(([id]) => !replaced.has(id))) }))
+      : record.students,
+  };
+}
+
+/**
+ * A new class with the same subject and setup for all three terms (columns, categories, Class
+ * Standing modes, OBE) and no students. Every id inside is new; `nid` is used for the class too.
+ */
+export function duplicateClassSetup(source: ClassRecord, section: string, nid: () => string): ClassRecord {
+  const copy = TERMS.reduce((r, t) => copyTermSetup(r, t, t, nid), source);
+  return {
+    ...copy,
+    id: nid(),
+    section: section.trim(),
+    students: [],
+    obe: source.obe && structuredClone(source.obe),
+    updatedAt: Date.now(),
+  };
+}
+
+export interface ColumnStats {
+  /** Students with a valid numeric score in this column. */
+  count: number;
+  sum: number;
+  /** Mean score, rounded half-up to 2 decimals; null when nobody has a score. */
+  average: number | null;
+  /** Mean score as a percentage of the column's maximum (1 decimal). */
+  averagePct: number | null;
+}
+
+export interface TermStats {
+  columns: Record<string, ColumnStats>;
+  /** Students with a computed term grade. */
+  graded: number;
+  passedCount: number;
+  failedCount: number;
+  /** Share of graded students who passed (1 decimal); null when nobody is graded. */
+  passedPct: number | null;
+  /** Mean term grade of graded students, rounded half-up to 2 decimals. */
+  meanTermGrade: number | null;
+}
+
+/** Class statistics for one term: per-column averages, and how the graded students did. Counts and means only. */
+export function termColumnStats(record: ClassRecord, term: Term): TermStats {
+  const columns: Record<string, ColumnStats> = {};
+  for (const c of record.terms[term].columns) {
+    const scores: number[] = [];
+    for (const s of record.students) {
+      const parsed = parseScore(s.scores[c.id], c.maxScore);
+      if (parsed.kind === 'ok') scores.push(parsed.value);
+    }
+    const sum = sumMarks(scores);
+    columns[c.id] = {
+      count: scores.length,
+      sum,
+      average: scores.length ? roundHalfUp(sum / scores.length, 2) : null,
+      averagePct: scores.length ? roundHalfUp((sum / scores.length / c.maxScore) * 100, 1) : null,
+    };
+  }
+  const grades: number[] = [];
+  for (const s of record.students) {
+    const o = termOutcome(record, s, term);
+    if (o.kind === 'ok') grades.push(o.result.termGrade);
+  }
+  const passedCount = grades.filter((g) => g >= rules.passingGrade).length;
+  return {
+    columns,
+    graded: grades.length,
+    passedCount,
+    failedCount: grades.length - passedCount,
+    passedPct: grades.length ? roundHalfUp((passedCount / grades.length) * 100, 1) : null,
+    meanTermGrade: grades.length ? roundHalfUp(sumMarks(grades) / grades.length, 2) : null,
+  };
+}
+
+export interface PasteExtent {
+  /** Columns in the widest pasted row. */
+  pastedColumns: number;
+  /** Editable cells from the focused cell to the right edge of the grid, the focused one included. */
+  availableColumns: number;
+  /** Pasted columns that have no cell to go into (0 when everything fits). */
+  overflow: number;
+  /** Columns that were actually written. */
+  written: number;
+}
+
+/** How a pasted Excel block fits the grid: `startKey` is the focused cell's index among `keyCount` editable cells. */
+export function pasteExtent(rows: string[][], keyCount: number, startKey: number): PasteExtent {
+  const pastedColumns = rows.reduce((n, cells) => Math.max(n, cells.length), 0);
+  const availableColumns = Math.max(keyCount - startKey, 0);
+  return { pastedColumns, availableColumns, overflow: Math.max(pastedColumns - availableColumns, 0), written: Math.min(pastedColumns, availableColumns) };
+}
+
+export type FillMode = 'blanks-only' | 'all';
+
+/**
+ * Sets one score in every student of a term's column. Students with a status in that term
+ * (INC, ABS, HNA, DRP, WP) are left alone. `value` must be a valid score for the column;
+ * otherwise nothing changes. Returns the same record when no cell changes.
+ */
+export function fillColumn(record: ClassRecord, term: Term, columnId: string, value: string, mode: FillMode): ClassRecord {
+  const column = record.terms[term].columns.find((c) => c.id === columnId);
+  const parsed = column && parseScore(value, column.maxScore);
+  if (!parsed || parsed.kind !== 'ok') return record;
+  const text = value.trim();
+  let changed = false;
+  const students = record.students.map((s) => {
+    if (s.statuses[term]) return s;
+    const current = s.scores[columnId] ?? '';
+    if (current === text || (mode === 'blanks-only' && current.trim() !== '')) return s;
+    changed = true;
+    return { ...s, scores: { ...s.scores, [columnId]: text } };
+  });
+  return changed ? { ...record, students } : record;
+}
+
+/** Removes the scores typed in one column, for every student. Returns the same record when there are none. */
+export function clearColumn(record: ClassRecord, columnId: string): ClassRecord {
+  if (!record.students.some((s) => columnId in s.scores)) return record;
+  return {
+    ...record,
+    students: record.students.map((s) => {
+      if (!(columnId in s.scores)) return s;
+      const { [columnId]: _cleared, ...scores } = s.scores;
+      return { ...s, scores };
+    }),
+  };
 }

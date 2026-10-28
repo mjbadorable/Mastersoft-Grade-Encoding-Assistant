@@ -2,10 +2,15 @@
 // Every change to a class is saved to IndexedDB through the save queue, which re-applies
 // it to the latest saved record so open tabs never overwrite each other (TC-028).
 import { create } from 'zustand';
+import { useShallow } from 'zustand/react/shallow';
 import type { ObeConfig, Status, SubjectType, Term } from '../engine';
-import { backupFingerprint } from './backup';
+import { TERM_LABEL } from './labels';
+import { backupFingerprint, restoreTemplates, restoreWorkspaceClasses } from './backup';
+import { createDemoClass } from './demoClass';
+import { clearColumn, copyTermSetup, duplicateClassSetup, fillColumn } from './gradebook';
 import { announceChanges, classStorage, db, getMeta, keepStorage, onOtherTabChanges, setMeta, storagePersisted } from './db';
-import { mergeImportedScores, type ImportedRow, type ImportMapping, type MergeScoresResult } from './excelImport';
+import { recordEdit, stepBack, stepForward, type ClassHistory } from './history';
+import { mergeImportedScores, TEMPLATES_KEY, type ImportTemplate, type ImportedRow, type ImportMapping, type MergeScoresResult } from './excelImport';
 import { mergeMastersoftRows, subjectTypeFromSubject, tidy, type MastersoftFile, type MergeResult } from './mastersoftFile';
 import { normalizeClassObe } from './obe';
 import { SaveQueue, type SaveStatus } from './saveQueue';
@@ -50,6 +55,10 @@ interface State {
   storageKept: boolean | null;
   /** Content fingerprint of each class at its last backup (see backupFingerprint). */
   backedUp: Record<string, string>;
+  /** A backup was downloaded or restored since the app opened (memory only; drives the backup reminder). */
+  sessionBackupTaken: boolean;
+  /** Undo / redo steps of each open class, kept in memory only (TC-029). */
+  history: Record<string, ClassHistory>;
 
   load: () => Promise<void>;
   acceptNotice: () => void;
@@ -59,22 +68,40 @@ interface State {
   openDrawer: (drawer: State['drawer']) => void;
   selectClass: (id: string) => void;
   createClass: (info: ClassInfo) => void;
+  /** Adds the sample demo class, opens it and shows its Prelim gradebook. */
+  loadDemoClass: () => void;
   updateClassInfo: (info: ClassInfo) => void;
   deleteClass: (id: string) => void;
+  /** Clones a class's 3-term setup and OBE into a new class with no students; returns its id ('' if the source is gone). */
+  duplicateClassSetup: (sourceClassId: string, newSection: string) => string;
   /** Mastersoft student list (D34): into a new class, or merged into the active one. */
   importMastersoft: (file: MastersoftFile, target: 'new' | 'active') => MergeResult;
   /** Smart Excel import (D7): mapped scores into one term of the active class. */
   importScores: (term: Term, mapping: ImportMapping, rows: ImportedRow[]) => MergeScoresResult;
   /** Restore a backup (D9), replacing the class with the same id or as a separate copy. */
   restoreClass: (record: ClassRecord, mode: 'replace' | 'copy') => void;
+  /**
+   * Restores a workspace backup. Merge keeps current classes and replaces the ones with a matching id;
+   * replace leaves only the backup's classes. Saved import templates follow the same rule.
+   */
+  restoreWorkspace: (classes: ClassRecord[], templates: ImportTemplate[] | undefined, mode: 'merge' | 'replace') => void;
   /** Tries the changes that failed to save again. */
   retrySave: () => void;
+  /** Steps the active class back / forward one edit and saves the result. */
+  undo: () => void;
+  redo: () => void;
 
   setCsMode: (term: Term, mode: CsMode) => void;
   saveColumn: (term: Term, column: Column) => void;
   deleteColumn: (term: Term, columnId: string) => void;
+  /** Types one score into a column for the whole class. Students with a status in `term` are skipped. */
+  fillColumnScores: (term: Term, columnId: string, value: string, mode: 'blanks-only' | 'all') => void;
+  /** Removes every score typed in a column. */
+  clearColumnScores: (term: Term, columnId: string) => void;
   setCategories: (term: Term, categories: Category[]) => void;
   setObeConfig: (obe: ObeConfig) => void;
+  /** Gives a term the columns, categories and Class Standing mode of another; no scores (TC-029 undoes it). */
+  copyTermSetup: (fromTerm: Term, toTerm: Term) => void;
 
   addStudent: () => void;
   deleteStudent: (id: string) => void;
@@ -82,7 +109,8 @@ interface State {
   setScore: (id: string, columnId: string, value: string) => void;
   setStatus: (id: string, term: Term, status: Status | undefined) => void;
   setReverse: (id: string, reverse: ReverseInput | undefined) => void;
-  pasteBlock: (startRow: number, keys: CellKey[], startKey: number, rows: string[][]) => void;
+  /** `order`: the record rows the pasted rows go to, when the grid is filtered or sorted; rows past it add students. */
+  pasteBlock: (startRow: number, keys: CellKey[], startKey: number, rows: string[][], order?: number[]) => void;
 }
 
 const ignore = () => {};
@@ -120,10 +148,14 @@ export const useStore = create<State>()((set, get) => {
     },
   });
 
-  /** Applies an edit to the active class now, and queues it to be saved. */
-  const update = (edit: Edit) => {
-    const { classes, activeClassId } = get();
-    if (!activeClassId) return;
+  /**
+   * Applies an edit to the active class now, and queues it to be saved. `label` says what the
+   * edit did (for undo); edits with the same `key` in quick succession count as one step.
+   */
+  const update = (edit: Edit, label: string, key?: string) => {
+    const { classes, activeClassId, history } = get();
+    const before = classes.find((c) => c.id === activeClassId);
+    if (!activeClassId || !before) return;
     const ids: string[] = [];
     const replayIds = () => {
       let i = 0;
@@ -133,13 +165,37 @@ export const useStore = create<State>()((set, get) => {
       };
     };
     const apply = (c: ClassRecord) => ({ ...edit(c, replayIds()), updatedAt: Date.now() });
-    set({ classes: classes.map((c) => (c.id === activeClassId ? apply(c) : c)) });
+    set({
+      classes: classes.map((c) => (c.id === activeClassId ? apply(c) : c)),
+      history: { ...history, [activeClassId]: recordEdit(history[activeClassId], before, label, key, Date.now()) },
+    });
     queue.enqueue({ classId: activeClassId, change: (latest) => latest && apply(latest) });
   };
-  const updateTerm = (term: Term, fn: (t: TermSetup) => TermSetup) =>
-    update((c) => ({ ...c, terms: { ...c.terms, [term]: fn(c.terms[term]) } }));
-  const updateStudent = (id: string, fn: (s: Student) => Student) =>
-    update((c) => ({ ...c, students: c.students.map((s) => (s.id === id ? fn(s) : s)) }));
+  const activeClass = () => get().classes.find((c) => c.id === get().activeClassId);
+  /** A column's label for undo tooltips, looked up in every term of the active class. */
+  const columnLabel = (columnId: string) =>
+    Object.values(activeClass()?.terms ?? {})
+      .flatMap((t) => t.columns)
+      .find((c) => c.id === columnId)?.label ?? 'a deleted column';
+  /** Moves the active class along its history and saves that exact copy (it replaces the saved class, other tabs' edits included). */
+  const travel = (step: typeof stepBack) => {
+    const { classes, activeClassId, history } = get();
+    const current = activeClass();
+    if (!activeClassId || !current) return;
+    const result = step(history[activeClassId], current, Date.now());
+    if (!result) return;
+    const record = { ...result.record, updatedAt: Date.now() };
+    set({
+      classes: classes.map((c) => (c.id === activeClassId ? record : c)),
+      history: { ...history, [activeClassId]: result.history },
+      drawer: null,
+    });
+    saveWhole(activeClassId, record);
+  };
+  const updateTerm = (term: Term, fn: (t: TermSetup) => TermSetup, label: string) =>
+    update((c) => ({ ...c, terms: { ...c.terms, [term]: fn(c.terms[term]) } }), label);
+  const updateStudent = (id: string, fn: (s: Student) => Student, label: string, key?: string) =>
+    update((c) => ({ ...c, students: c.students.map((s) => (s.id === id ? fn(s) : s)) }), label, key);
   /** Saves a whole record (new, restored) or deletes one. */
   const saveWhole = (classId: string, record: ClassRecord | 'delete') => queue.enqueue({ classId, change: () => record });
   const saveMeta = (key: string, value: unknown) => void setMeta(key, value).catch(ignore);
@@ -155,6 +211,8 @@ export const useStore = create<State>()((set, get) => {
     storageError: null,
     storageKept: null,
     backedUp: {},
+    history: {},
+    sessionBackupTaken: false,
 
     async load() {
       try {
@@ -198,7 +256,7 @@ export const useStore = create<State>()((set, get) => {
     },
     markBackedUp(record) {
       const backedUp = { ...get().backedUp, [record.id]: backupFingerprint(record) };
-      set({ backedUp });
+      set({ backedUp, sessionBackupTaken: true });
       saveMeta('backedUp', backedUp);
     },
     setView: (view) => set({ view, drawer: null }),
@@ -219,11 +277,36 @@ export const useStore = create<State>()((set, get) => {
       saveWhole(record.id, record);
       saveMeta('activeClassId', record.id);
     },
-    updateClassInfo: ({ subjectCode, subjectName, section, subjectType }) => update((c) => ({ ...c, subjectCode, subjectName, section, subjectType })),
+    loadDemoClass() {
+      const record = createDemoClass();
+      set({ classes: [record, ...get().classes], activeClassId: record.id, view: 'PRELIM', drawer: null });
+      saveWhole(record.id, record);
+      saveMeta('activeClassId', record.id);
+    },
+    updateClassInfo: ({ subjectCode, subjectName, section, subjectType }) => update((c) => ({ ...c, subjectCode, subjectName, section, subjectType }), 'Edit class info'),
+    duplicateClassSetup(sourceClassId, newSection) {
+      const source = get().classes.find((c) => c.id === sourceClassId);
+      if (!source) return '';
+      const record = duplicateClassSetup(source, newSection, newId);
+      // Undo leaves the new class as it would be without the copied setup.
+      const blank: ClassRecord = { ...record, terms: { PRELIM: emptyTerm(), MIDTERM: emptyTerm(), FINAL: emptyTerm() }, obe: undefined };
+      const label = `Duplicate setup from ${source.subjectCode} (${source.section})`;
+      set({
+        classes: [record, ...get().classes],
+        activeClassId: record.id,
+        history: { ...get().history, [record.id]: recordEdit(undefined, blank, label, undefined, Date.now()) },
+        view: 'PRELIM',
+        drawer: null,
+      });
+      saveWhole(record.id, record);
+      saveMeta('activeClassId', record.id);
+      return record.id;
+    },
     deleteClass(id) {
       const classes = get().classes.filter((c) => c.id !== id);
       const activeClassId = get().activeClassId === id ? (classes[0]?.id ?? null) : get().activeClassId;
-      set({ classes, activeClassId, drawer: null });
+      const { [id]: _gone, ...history } = get().history;
+      set({ classes, activeClassId, history, drawer: null });
       saveWhole(id, 'delete');
       if (activeClassId) saveMeta('activeClassId', activeClassId);
     },
@@ -241,7 +324,7 @@ export const useStore = create<State>()((set, get) => {
       update((c, nid) => {
         result = mergeMastersoftRows(c.students, file.rows, () => newStudent(nid()));
         return { ...c, students: result.students, mastersoftSession: file.session ?? c.mastersoftSession };
-      });
+      }, 'Import Mastersoft student list');
       return result;
     },
     importScores(term, mapping, rows) {
@@ -249,7 +332,7 @@ export const useStore = create<State>()((set, get) => {
       update((c, nid) => {
         result = mergeImportedScores(c, term, mapping, rows, { student: () => newStudent(nid()), id: nid });
         return result.record;
-      });
+      }, `Import scores from Excel into ${TERM_LABEL[term]}`);
       return result;
     },
     restoreClass(record, mode) {
@@ -257,6 +340,7 @@ export const useStore = create<State>()((set, get) => {
       set({
         classes: [restored, ...get().classes.filter((c) => c.id !== restored.id)],
         activeClassId: restored.id,
+        history: { ...get().history, [restored.id]: { past: [], future: [] } },
         view: 'PRELIM',
         drawer: null,
       });
@@ -265,46 +349,107 @@ export const useStore = create<State>()((set, get) => {
       // Replaced from a backup file: that file already holds exactly this class.
       if (mode === 'replace') get().markBackedUp(restored);
     },
+    restoreWorkspace(incoming, templates, mode) {
+      const before = get().classes;
+      const restored = incoming.map((c) => ({ ...c, updatedAt: Date.now() }));
+      const classes = restoreWorkspaceClasses(before, restored, mode);
+      const activeClassId = classes.some((c) => c.id === get().activeClassId) ? get().activeClassId : (classes[0]?.id ?? null);
+      const removed = before.filter((c) => !classes.some((x) => x.id === c.id));
+      const history = { ...get().history };
+      for (const c of restored) history[c.id] = { past: [], future: [] };
+      for (const c of removed) delete history[c.id];
+      // The backup file holds exactly these classes.
+      const backedUp = { ...get().backedUp };
+      for (const c of restored) backedUp[c.id] = backupFingerprint(c);
+      set({ classes, activeClassId, history, backedUp, drawer: null, sessionBackupTaken: true });
+      for (const c of restored) saveWhole(c.id, c);
+      for (const c of removed) saveWhole(c.id, 'delete');
+      if (activeClassId) saveMeta('activeClassId', activeClassId);
+      saveMeta('backedUp', backedUp);
+      if (templates) {
+        void getMeta<ImportTemplate[]>(TEMPLATES_KEY)
+          .then((current) => setMeta(TEMPLATES_KEY, restoreTemplates(current ?? [], templates, mode)))
+          .catch(ignore);
+      }
+    },
     retrySave: () => queue.retry(),
+    undo: () => travel(stepBack),
+    redo: () => travel(stepForward),
 
-    setCsMode: (term, csMode) => updateTerm(term, (t) => ({ ...t, csMode })),
+    setCsMode: (term, csMode) => updateTerm(term, (t) => ({ ...t, csMode }), 'Change Class Standing mode'),
     saveColumn: (term, column) =>
-      updateTerm(term, (t) => ({
-        ...t,
-        columns: t.columns.some((c) => c.id === column.id)
-          ? t.columns.map((c) => (c.id === column.id ? column : c))
-          : [...t.columns, column],
-      })),
-    deleteColumn: (term, columnId) =>
-      update((c) => ({
-        ...c,
-        terms: { ...c.terms, [term]: { ...c.terms[term], columns: c.terms[term].columns.filter((col) => col.id !== columnId) } },
-        students: c.students.map((s) => {
-          const { [columnId]: _removed, ...scores } = s.scores;
-          return { ...s, scores };
+      updateTerm(
+        term,
+        (t) => ({
+          ...t,
+          columns: t.columns.some((c) => c.id === column.id)
+            ? t.columns.map((c) => (c.id === column.id ? column : c))
+            : [...t.columns, column],
         }),
-      })),
-    setCategories: (term, categories) => updateTerm(term, (t) => ({ ...t, categories })),
-    setObeConfig: (obe) => update((c) => ({ ...c, obe })),
+        `${activeClass()?.terms[term].columns.some((c) => c.id === column.id) ? 'Edit' : 'Add'} column ${column.label}`,
+      ),
+    deleteColumn: (term, columnId) =>
+      update(
+        (c) => ({
+          ...c,
+          terms: { ...c.terms, [term]: { ...c.terms[term], columns: c.terms[term].columns.filter((col) => col.id !== columnId) } },
+          students: c.students.map((s) => {
+            const { [columnId]: _removed, ...scores } = s.scores;
+            return { ...s, scores };
+          }),
+        }),
+        `Delete column ${columnLabel(columnId)}`,
+      ),
+    fillColumnScores(term, columnId, value, mode) {
+      const record = activeClass();
+      const column = record?.terms[term].columns.find((c) => c.id === columnId);
+      if (!record || !column || fillColumn(record, term, columnId, value, mode) === record) return;
+      update((c) => fillColumn(c, term, columnId, value, mode), `Fill ${column.label} with ${value.trim()}`);
+    },
+    clearColumnScores(term, columnId) {
+      const record = activeClass();
+      const column = record?.terms[term].columns.find((c) => c.id === columnId);
+      if (!record || !column || clearColumn(record, columnId) === record) return;
+      update((c) => clearColumn(c, columnId), `Clear scores in ${column.label}`);
+    },
+    setCategories: (term, categories) => updateTerm(term, (t) => ({ ...t, categories }), 'Edit categories'),
+    copyTermSetup(fromTerm, toTerm) {
+      if (fromTerm === toTerm || !activeClass()?.terms[fromTerm].columns.length) return;
+      update((c, nid) => copyTermSetup(c, fromTerm, toTerm, nid), `Copy setup from ${TERM_LABEL[fromTerm]} to ${TERM_LABEL[toTerm]}`);
+    },
+    setObeConfig: (obe) => update((c) => ({ ...c, obe }), 'Edit OBE setup'),
 
-    addStudent: () => update((c, nid) => ({ ...c, students: [...c.students, newStudent(nid())] })),
-    deleteStudent: (id) => update((c) => ({ ...c, students: c.students.filter((s) => s.id !== id) })),
-    setStudentField: (id, field, value) => updateStudent(id, (s) => ({ ...s, [field]: value })),
-    setScore: (id, columnId, value) => updateStudent(id, (s) => ({ ...s, scores: { ...s.scores, [columnId]: value } })),
+    addStudent: () => update((c, nid) => ({ ...c, students: [...c.students, newStudent(nid())] }), 'Add student'),
+    deleteStudent: (id) => update((c) => ({ ...c, students: c.students.filter((s) => s.id !== id) }), 'Delete student'),
+    setStudentField(id, field, value) {
+      if (activeClass()?.students.find((s) => s.id === id)?.[field] === value) return;
+      updateStudent(id, (s) => ({ ...s, [field]: value }), `Edit student ${field === 'name' ? 'name' : 'ID'}`, `${id}:${field}`);
+    },
+    setScore(id, columnId, value) {
+      const student = activeClass()?.students.find((s) => s.id === id);
+      if ((student?.scores[columnId] ?? '') === value) return;
+      updateStudent(id, (s) => ({ ...s, scores: { ...s.scores, [columnId]: value } }), `Score edit in ${columnLabel(columnId)}`, `${id}:${columnId}`);
+    },
     setStatus: (id, term, status) =>
-      updateStudent(id, (s) => {
-        const statuses = { ...s.statuses };
-        if (status) statuses[term] = status;
-        else delete statuses[term];
-        return { ...s, statuses };
-      }),
-    setReverse: (id, reverse) => updateStudent(id, (s) => ({ ...s, reverse })),
+      updateStudent(
+        id,
+        (s) => {
+          const statuses = { ...s.statuses };
+          if (status) statuses[term] = status;
+          else delete statuses[term];
+          return { ...s, statuses };
+        },
+        status ? `Set status ${status}` : 'Clear status',
+      ),
+    setReverse: (id, reverse) => updateStudent(id, (s) => ({ ...s, reverse }), 'Edit reverse-mode input', `${id}:reverse`),
 
     /** Pastes a block copied from Excel, adding students when it runs past the last row. */
-    pasteBlock(startRow, keys, startKey, rows) {
+    pasteBlock(startRow, keys, startKey, rows, order) {
       // Fix the target students now, by id, so the save lands on the same rows.
       const current = get().classes.find((c) => c.id === get().activeClassId)?.students ?? [];
-      const targets = rows.map((_, r) => current[startRow + r]?.id);
+      const targets = rows.map((_, r) => (order ? current[order[r] ?? -1] : current[startRow + r])?.id);
+      const scoreCells = rows.reduce((n, cells) => n + cells.filter((_, k) => typeof keys[startKey + k] === 'object').length, 0);
+      const cellCount = scoreCells || rows.reduce((n, cells) => n + cells.length, 0);
       update((c, nid) => {
         const students = [...c.students];
         rows.forEach((cells, r) => {
@@ -323,9 +468,18 @@ export const useStore = create<State>()((set, get) => {
           else students.push(student);
         });
         return { ...c, students };
-      });
+      }, `Paste ${cellCount} ${scoreCells ? 'score' : 'cell'}${cellCount === 1 ? '' : 's'} from Excel`);
     },
   };
 });
+
+/** What undo and redo would do for the open class (null: nothing to step through). */
+export const useHistoryLabels = () =>
+  useStore(
+    useShallow((s) => {
+      const h = s.activeClassId ? s.history[s.activeClassId] : undefined;
+      return { undo: h?.past.at(-1)?.label ?? null, redo: h?.future.at(-1)?.label ?? null };
+    }),
+  );
 
 export const useActiveClass = () => useStore((s) => s.classes.find((c) => c.id === s.activeClassId) ?? null);

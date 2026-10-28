@@ -62,8 +62,34 @@ describe('obeReport', () => {
 
 describe('columnTags', () => {
   it('lists the codes in syllabus order and skips deleted outcomes', () => {
-    expect(columnTags(obe, record.terms.PRELIM.columns[0]!)).toEqual({ cos: ['CO1'], los: ['LO 1.1'] });
-    expect(columnTags(undefined, record.terms.PRELIM.columns[0]!)).toEqual({ cos: [], los: [] });
+    expect(columnTags(obe, record.terms.PRELIM.columns[0]!)).toEqual({ cos: ['CO1'], los: ['LO 1.1'], coText: 'CO1' });
+    expect(columnTags(undefined, record.terms.PRELIM.columns[0]!)).toEqual({ cos: [], los: [], coText: '' });
+  });
+
+  describe('CO text', () => {
+    const both: Column = { id: 'x', label: 'Quiz', maxScore: 10, component: 'CS', coIds: ['co2', 'co1'] };
+
+    it('keeps an equal split compact, in syllabus order', () => {
+      expect(columnTags(obe, both).coText).toBe('CO1 · CO2');
+    });
+
+    it('shows custom weights as percentages', () => {
+      expect(columnTags(obe, { ...both, coWeights: { co1: 40, co2: 60 } }).coText).toBe('CO1 40% · CO2 60%');
+      expect(columnTags(obe, { ...both, coWeights: { co1: 33.3, co2: 66.7 } }).coText).toBe('CO1 33.3% · CO2 66.7%');
+    });
+
+    it('reads weights that are not out of 100 as shares, like the engine', () => {
+      expect(columnTags(obe, { ...both, coWeights: { co1: 1, co2: 3 } }).coText).toBe('CO1 25% · CO2 75%');
+    });
+
+    it('shows no percentage for one CO or for weights that are all zero', () => {
+      expect(columnTags(obe, { ...both, coIds: ['co1'], coWeights: { co1: 100 } }).coText).toBe('CO1');
+      expect(columnTags(obe, { ...both, coWeights: { co1: 0, co2: 0 } }).coText).toBe('CO1 · CO2');
+    });
+
+    it('ignores weights of COs that are no longer tagged', () => {
+      expect(columnTags(obe, { ...both, coIds: ['co1'], coWeights: { co1: 50, co2: 50 } }).coText).toBe('CO1');
+    });
   });
 });
 

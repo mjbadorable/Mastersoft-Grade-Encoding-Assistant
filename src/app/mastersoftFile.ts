@@ -3,7 +3,7 @@
 // the student rows exactly as written; the export writes them back with only Marks filled.
 import * as XLSX from 'xlsx';
 import type { SubjectType, Term } from '../engine';
-import { duplicateStudentIds, termOutcome, termSetupIssues, assessmentTotals } from './gradebook';
+import { duplicateStudentIds, reverseOutcome, termOutcome, termSetupIssues, assessmentTotals } from './gradebook';
 import type { ClassRecord, Component, MastersoftRow, Student } from './types';
 
 export const MASTERSOFT_HEADERS = ['Student Id', 'Student Name', 'Subject', 'Campus', 'Section', 'Semester', 'Marks'] as const;
@@ -149,6 +149,9 @@ export interface ExportPlan {
   decimalMarks: string[];
 }
 
+/** Total Marks in Final Rating Only mode, for both components in every term. */
+const REVERSE_TOTAL = 100;
+
 const label = (s: Student) => s.name || s.studentId || 'Unnamed student';
 
 /** Collects the engine's marks for one Mastersoft file. Does no grade math itself. */
@@ -208,7 +211,8 @@ export function buildMastersoftFile(rows: ExportRow[]): Uint8Array {
   const ws = XLSX.utils.aoa_to_sheet(aoa);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
-  return XLSX.write(wb, { type: 'array', bookType: 'xlsx', bookSST: false }) as Uint8Array;
+  // SheetJS returns an ArrayBuffer here; wrap it so callers get real bytes.
+  return new Uint8Array(XLSX.write(wb, { type: 'array', bookType: 'xlsx', bookSST: false }) as ArrayBuffer);
 }
 
 /** Same naming as Mastersoft's downloads, e.g. "1stSem,2024-2025-Chem1-MLS1-A-Prelim-ClassStanding.xlsx". */
@@ -217,3 +221,169 @@ export function exportFileName(record: ClassRecord, term: Term, component: Compo
   const parts = [record.mastersoftSession, noSpaces(record.subjectCode), noSpaces(section), FILE_TERM[term], FILE_COMPONENT[component]];
   return `${parts.filter((p) => p).join('-')}.xlsx`;
 }
+
+/**
+ * Final Rating Only mode: the same solved mark goes in both components of all three terms,
+ * and "Marks Out of" is 100. Collects it for one Mastersoft file; no grade math here.
+ */
+export function planReverseExport(record: ClassRecord, term: Term, component: Component): ExportPlan {
+  const plan: ExportPlan = { term, component, total: REVERSE_TOTAL, rows: [], blockers: [], statusStudents: [], notInFile: [], decimalMarks: [] };
+  const imported = record.students.filter((s) => s.mastersoft).sort((a, b) => a.mastersoft!.order - b.mastersoft!.order);
+  plan.notInFile = record.students.filter((s) => !s.mastersoft).map(label);
+  if (imported.length === 0) {
+    plan.blockers.push('Import the student list from a Mastersoft file first.');
+    return plan;
+  }
+  for (const [, list] of duplicateStudentIds(record.students)) {
+    plan.blockers.push(`Student ID ${list[0]!.studentId.trim()} is used by more than one student: ${list.map(label).join(', ')}. Each student can appear only once.`);
+  }
+  const noTarget: string[] = [];
+  const unreachable: string[] = [];
+  for (const s of imported) {
+    const o = reverseOutcome(record, s);
+    if (o.kind === 'ok') plan.rows.push({ row: s.mastersoft!, mark: o.solved.mark });
+    else if (o.kind === 'invalid') unreachable.push(label(s));
+    else noTarget.push(label(s));
+  }
+  if (unreachable.length > 0) plan.blockers.push(`Fix the target of: ${unreachable.join(', ')}.`);
+  if (noTarget.length > 0) plan.blockers.push(`Enter a target Final Rating for: ${noTarget.join(', ')}.`);
+  return plan;
+}
+
+export interface BatchFile {
+  fileName: string;
+  data: Uint8Array;
+  term: Term;
+  component: Component;
+}
+
+export interface BatchBlocker {
+  term: Term;
+  component: Component;
+  /** The file that can't be made yet. */
+  fileName: string;
+  reasons: string[];
+}
+
+export interface BatchExportPlan {
+  /** Files that can be made now, in Prelim → Final order, CS before WE. */
+  files: BatchFile[];
+  blocked: BatchBlocker[];
+  /** Always 6: Class Standing and Written Exam for each of the three terms. */
+  totalFiles: number;
+  zipName: string;
+}
+
+const EXPORT_TERMS: Term[] = ['PRELIM', 'MIDTERM', 'FINAL'];
+const EXPORT_COMPONENTS: Component[] = ['CS', 'WE'];
+
+/** "{subjectCode}-{section}-Mastersoft-Uploads.zip", spaces removed like Mastersoft's file names. */
+export function zipFileName(record: ClassRecord): string {
+  const section = record.students.find((s) => s.mastersoft)?.mastersoft?.section ?? record.section;
+  return `${[noSpaces(record.subjectCode), noSpaces(section), 'Mastersoft-Uploads'].filter((p) => p).join('-')}.zip`;
+}
+
+/**
+ * Plans all six upload files at once (3 terms × CS/WE). A file is included only when its
+ * single-file plan has no blockers; the rest are listed in `blocked` with the reasons.
+ * Pass `reverse` for Final Rating Only mode. Does no grade math itself.
+ */
+export function planAllTermsExport(record: ClassRecord, reverse = false): BatchExportPlan {
+  const files: BatchFile[] = [];
+  const blocked: BatchBlocker[] = [];
+  for (const term of EXPORT_TERMS) {
+    for (const component of EXPORT_COMPONENTS) {
+      const plan = reverse ? planReverseExport(record, term, component) : planExport(record, term, component);
+      const fileName = exportFileName(record, term, component);
+      if (plan.blockers.length > 0) blocked.push({ term, component, fileName, reasons: plan.blockers });
+      else files.push({ fileName, data: buildMastersoftFile(plan.rows), term, component });
+    }
+  }
+  return { files, blocked, totalFiles: EXPORT_TERMS.length * EXPORT_COMPONENTS.length, zipName: zipFileName(record) };
+}
+
+const CRC_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    table[n] = c >>> 0;
+  }
+  return table;
+})();
+
+function crc32(data: Uint8Array): number {
+  let c = 0xffffffff;
+  for (const byte of data) c = CRC_TABLE[(c ^ byte) & 0xff]! ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+/**
+ * Packs files into a zip archive with no compression ("stored"). The .xlsx files are
+ * already compressed, so this costs almost no size and needs no library.
+ */
+export function buildZip(files: { fileName: string; data: Uint8Array }[], date = new Date()): Uint8Array {
+  const enc = new TextEncoder();
+  const dosTime = (date.getHours() << 11) | (date.getMinutes() << 5) | (date.getSeconds() >> 1);
+  const dosDate = (Math.max(date.getFullYear() - 1980, 0) << 9) | ((date.getMonth() + 1) << 5) | date.getDate();
+  const UTF8_NAMES = 0x0800;
+
+  const parts: Uint8Array[] = [];
+  const central: Uint8Array[] = [];
+  let offset = 0;
+  const header = (size: number) => {
+    const buf = new Uint8Array(size);
+    return { buf, view: new DataView(buf.buffer) };
+  };
+
+  for (const { fileName, data } of files) {
+    const name = enc.encode(fileName);
+    const crc = crc32(data);
+    const local = header(30);
+    local.view.setUint32(0, 0x04034b50, true);
+    local.view.setUint16(4, 20, true);
+    local.view.setUint16(6, UTF8_NAMES, true);
+    local.view.setUint16(10, dosTime, true);
+    local.view.setUint16(12, dosDate, true);
+    local.view.setUint32(14, crc, true);
+    local.view.setUint32(18, data.length, true);
+    local.view.setUint32(22, data.length, true);
+    local.view.setUint16(26, name.length, true);
+    parts.push(local.buf, name, data);
+
+    const entry = header(46);
+    entry.view.setUint32(0, 0x02014b50, true);
+    entry.view.setUint16(4, 20, true);
+    entry.view.setUint16(6, 20, true);
+    entry.view.setUint16(8, UTF8_NAMES, true);
+    entry.view.setUint16(12, dosTime, true);
+    entry.view.setUint16(14, dosDate, true);
+    entry.view.setUint32(16, crc, true);
+    entry.view.setUint32(20, data.length, true);
+    entry.view.setUint32(24, data.length, true);
+    entry.view.setUint16(28, name.length, true);
+    entry.view.setUint32(42, offset, true);
+    central.push(entry.buf, name);
+    offset += 30 + name.length + data.length;
+  }
+
+  const centralSize = central.reduce((n, p) => n + p.length, 0);
+  const end = header(22);
+  end.view.setUint32(0, 0x06054b50, true);
+  end.view.setUint16(8, files.length, true);
+  end.view.setUint16(10, files.length, true);
+  end.view.setUint32(12, centralSize, true);
+  end.view.setUint32(16, offset, true);
+
+  const all = [...parts, ...central, end.buf];
+  const out = new Uint8Array(all.reduce((n, p) => n + p.length, 0));
+  let pos = 0;
+  for (const p of all) {
+    out.set(p, pos);
+    pos += p.length;
+  }
+  return out;
+}
+
+/** The zip of every file in a batch plan. */
+export const buildBatchZip = (plan: BatchExportPlan): Uint8Array => buildZip(plan.files);

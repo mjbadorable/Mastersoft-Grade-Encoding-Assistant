@@ -1,5 +1,6 @@
 import { Plus, Trash2 } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
+import { parseScore } from '../app/gradebook';
 import { useStore } from '../app/store';
 import type { Category, Column, Component, TermSetup } from '../app/types';
 import { OBE_DEFAULT_CONFIG, sumMarks, type ObeConfig, type Term } from '../engine';
@@ -46,13 +47,26 @@ function ColumnForm({ term, setup, column, onClose, hasScores, defaultComponent,
   const [categoryId, setCategoryId] = useState(existing?.categoryId ?? setup.categories[0]?.id ?? '');
   const [coIds, setCoIds] = useState(existing?.coIds ?? []);
   const [loIds, setLoIds] = useState(existing?.loIds ?? []);
+  // Custom CO split: starts custom only when the column already has weights for a tagged CO.
+  const [split, setSplit] = useState<'equal' | 'custom'>(coIds.some((id) => existing?.coWeights?.[id] !== undefined) ? 'custom' : 'equal');
+  const [weightText, setWeightText] = useState<Record<string, string>>(
+    Object.fromEntries(Object.entries(existing?.coWeights ?? {}).map(([id, w]) => [id, String(w)])),
+  );
+  const hasCos = !!obe && obe.cos.length > 0;
+  const [obeOpen, setObeOpen] = useState(false);
+  const customSplit = split === 'custom' && coIds.length >= 2;
+  const shownWeight = (id: string) => weightText[id] ?? String(Math.round(100 / coIds.length));
+  const weights = coIds.map((id) => Number(shownWeight(id)));
+  const weightsPlain = coIds.every((id, i) => shownWeight(id).trim() !== '' && Number.isFinite(weights[i]) && weights[i]! > 0);
+  const weightTotal = weightsPlain ? sumMarks(weights) : NaN;
+  const weightsValid = !customSplit || weightTotal === 100;
   const weighted = setup.csMode === 'WEIGHTED_CATEGORIES';
   const maxScore = Number(max);
   const maxValid = max.trim() !== '' && Number.isFinite(maxScore) && maxScore > 0;
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    if (!maxValid) return;
+    if (!maxValid || !weightsValid) return;
     saveColumn(term, {
       id: existing?.id ?? crypto.randomUUID(),
       label: label.trim() || (component === 'CS' ? 'Quiz' : 'Exam'),
@@ -61,7 +75,7 @@ function ColumnForm({ term, setup, column, onClose, hasScores, defaultComponent,
       categoryId: component === 'CS' && categoryId ? categoryId : undefined,
       coIds: coIds.length > 0 ? coIds : undefined,
       loIds: loIds.length > 0 ? loIds : undefined,
-      coWeights: keptWeights(existing?.coWeights, coIds),
+      coWeights: customSplit ? Object.fromEntries(coIds.map((id, i) => [id, weights[i]!])) : undefined,
     });
     onClose();
   };
@@ -125,8 +139,8 @@ function ColumnForm({ term, setup, column, onClose, hasScores, defaultComponent,
         </Label>
       )}
       <fieldset className="grid gap-2">
-        <legend className="mb-1 text-xs font-medium text-slate-600">OBE outcomes assessed</legend>
-        {obe && obe.cos.length > 0 ? (
+        {hasCos && <legend className="mb-1 text-xs font-medium text-slate-600">OBE outcomes assessed</legend>}
+        {hasCos ? (
           <>
             <TagPills label="Course Outcomes" options={obe.cos.map((c) => ({ id: c.id, code: c.code, title: c.description }))} selected={coIds} onChange={setCoIds} />
             <TagPills
@@ -135,8 +149,52 @@ function ColumnForm({ term, setup, column, onClose, hasScores, defaultComponent,
               selected={loIds}
               onChange={setLoIds}
             />
-            {coIds.length > 1 && !keptWeights(existing?.coWeights, coIds) && <p className="text-[11px] text-slate-500">Points are split equally across the tagged COs.</p>}
+            {coIds.length >= 2 && (
+              <div className="grid gap-2">
+                <div role="radiogroup" aria-label="How points are split across the COs" className="flex gap-2">
+                  {(['equal', 'custom'] as const).map((v) => (
+                    <label
+                      key={v}
+                      className="flex flex-1 cursor-pointer items-center gap-2 rounded-md border border-slate-300 px-3 py-1.5 text-sm has-checked:border-brand has-checked:bg-brand/5"
+                    >
+                      <input type="radio" name="coSplit" checked={split === v} onChange={() => setSplit(v)} className="accent-brand" />
+                      {v === 'equal' ? 'Equal split' : 'Custom %'}
+                    </label>
+                  ))}
+                </div>
+                {customSplit ? (
+                  <>
+                    <div className="flex flex-wrap gap-3">
+                      {(obe?.cos ?? [])
+                        .filter((c) => coIds.includes(c.id))
+                        .map((c) => (
+                          <label key={c.id} className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
+                            {c.code}
+                            <Input
+                              value={shownWeight(c.id)}
+                              onChange={(e) => setWeightText({ ...weightText, [c.id]: e.target.value })}
+                              inputMode="decimal"
+                              aria-label={`${c.code} weight %`}
+                              className="tabular h-8 w-20"
+                            />
+                            %
+                          </label>
+                        ))}
+                    </div>
+                    <p className={weightTotal === 100 ? 'text-xs text-emerald-700' : 'text-xs text-amber-700'}>
+                      Total: {weightsPlain ? `${weightTotal}%` : 'enter numbers above 0'} {weightTotal === 100 ? '✓' : '(must be 100%)'}
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-[11px] text-slate-500">Points are split equally across the tagged COs.</p>
+                )}
+              </div>
+            )}
           </>
+        ) : !obeOpen ? (
+          <button type="button" onClick={() => setObeOpen(true)} className="justify-self-start text-xs font-medium text-brand underline-offset-2 hover:underline">
+            Tag OBE outcomes (optional)
+          </button>
         ) : (
           <div className="flex items-center justify-between gap-2 rounded-md border border-dashed border-slate-300 px-3 py-2 text-xs text-slate-500">
             No course outcomes set up for this class yet.
@@ -146,6 +204,7 @@ function ColumnForm({ term, setup, column, onClose, hasScores, defaultComponent,
           </div>
         )}
       </fieldset>
+      {existing && <BulkScoreTools term={term} column={existing} hasScores={hasScores(existing.id)} />}
       <div className="mt-2 flex items-center justify-between">
         {existing ? (
           <Button variant="ghost" className="text-red-600 hover:bg-red-50" onClick={() => void remove()}>
@@ -154,7 +213,7 @@ function ColumnForm({ term, setup, column, onClose, hasScores, defaultComponent,
         ) : (
           <span />
         )}
-        <Button type="submit" disabled={!maxValid}>
+        <Button type="submit" disabled={!maxValid || !weightsValid}>
           {existing ? 'Save' : 'Add column'}
         </Button>
       </div>
@@ -162,11 +221,58 @@ function ColumnForm({ term, setup, column, onClose, hasScores, defaultComponent,
   );
 }
 
-/** Custom CO weights stay only for COs that are still tagged. */
-function keptWeights(weights: Record<string, number> | undefined, coIds: string[]) {
-  if (!weights) return undefined;
-  const kept = Object.fromEntries(Object.entries(weights).filter(([id]) => coIds.includes(id)));
-  return Object.keys(kept).length > 0 ? kept : undefined;
+/** Collapsible fill / clear tools for a saved column. Fill skips students with a status in the term. */
+function BulkScoreTools({ term, column, hasScores }: { term: Term; column: Column; hasScores: boolean }) {
+  const { fillColumnScores, clearColumnScores } = useStore();
+  const [value, setValue] = useState('');
+  const [overwrite, setOverwrite] = useState(false);
+  const parsed = parseScore(value, column.maxScore);
+  const valid = parsed.kind === 'ok';
+  const fill = () => {
+    if (valid) fillColumnScores(term, column.id, value, overwrite ? 'all' : 'blanks-only');
+  };
+  const clear = async () => {
+    if (!(await confirmAction({ title: 'Clear all scores?', message: `Every score typed in "${column.label}" will be removed. You can undo this.`, confirmLabel: 'Clear scores' }))) return;
+    clearColumnScores(term, column.id);
+  };
+  return (
+    <details className="rounded-md border border-slate-200 px-3 py-2 text-sm">
+      <summary className="cursor-pointer text-xs font-medium text-slate-600">Bulk score tools</summary>
+      <div className="mt-3 grid gap-3">
+        <div className="flex flex-wrap items-end gap-2">
+          <Label className="w-32">
+            Fill value (0–{column.maxScore})
+            <Input
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  fill();
+                }
+              }}
+              inputMode="decimal"
+              placeholder={String(column.maxScore)}
+              aria-invalid={value.trim() !== '' && !valid}
+              className="tabular aria-invalid:border-red-500"
+            />
+          </Label>
+          <Button variant="outline" disabled={!valid} onClick={fill}>
+            Fill empty cells
+          </Button>
+        </div>
+        {value.trim() !== '' && parsed.kind === 'invalid' && <p className="text-xs text-red-600">{parsed.message}.</p>}
+        <label className="flex items-center gap-2 text-xs text-slate-600">
+          <input type="checkbox" checked={overwrite} onChange={(e) => setOverwrite(e.target.checked)} className="accent-brand" />
+          Also replace scores already typed
+        </label>
+        <p className="text-[11px] text-slate-500">Students with a status (INC, ABS, HNA, DRP, WP) in this term are skipped. Undo restores the old scores.</p>
+        <Button variant="ghost" className="justify-self-start text-red-600 hover:bg-red-50" disabled={!hasScores} onClick={() => void clear()}>
+          <Trash2 /> Clear all scores in column
+        </Button>
+      </div>
+    </details>
+  );
 }
 
 interface TagPillsProps {

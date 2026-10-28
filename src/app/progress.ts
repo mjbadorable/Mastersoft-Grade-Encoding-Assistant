@@ -1,6 +1,7 @@
 // How far a term is along the encoding workflow, for the step guide, the grid's
 // status bar and the sidebar. Counts only; grades still come from the engine.
 import type { Term } from '../engine';
+import { backupFingerprint } from './backup';
 import { csColumns, duplicateStudentIds, parseScore, sameIdAs, termOutcome, termSetupIssues, weColumns } from './gradebook';
 import type { ClassRecord } from './types';
 
@@ -95,4 +96,23 @@ function scoreProgress(record: ClassRecord, term: Term): TermProgress {
 export function nextProblem<T extends { row: number; column: number }>(problems: T[], after?: { row: number; column: number }): T | undefined {
   if (!after) return problems[0];
   return problems.find((p) => p.row > after.row || (p.row === after.row && p.column > after.column)) ?? problems[0];
+}
+
+export interface ClassOverview {
+  students: number;
+  /** Students whose Student ID is also used by another student. */
+  duplicateIds: number;
+  terms: Record<Term, TermProgress>;
+  /** Has students and changed since its last backup (or was never backed up). */
+  needsBackup: boolean;
+}
+
+/** One class's readiness across all three terms, for the all-classes overview (TC-032). */
+export function classOverview(record: ClassRecord, backedUpFingerprint?: string): ClassOverview {
+  return {
+    students: record.students.length,
+    duplicateIds: [...duplicateStudentIds(record.students).values()].reduce((n, list) => n + list.length, 0),
+    terms: { PRELIM: termProgress(record, 'PRELIM'), MIDTERM: termProgress(record, 'MIDTERM'), FINAL: termProgress(record, 'FINAL') },
+    needsBackup: record.students.length > 0 && backedUpFingerprint !== backupFingerprint(record),
+  };
 }

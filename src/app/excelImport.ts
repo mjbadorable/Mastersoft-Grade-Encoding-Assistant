@@ -163,6 +163,9 @@ export function applyMapping(grid: Grid, mapping: ImportMapping): ImportResult {
   return { rows, issues, setupIssues };
 }
 
+/** Where the saved import templates live in the browser's storage. */
+export const TEMPLATES_KEY = 'importTemplates';
+
 /** A saved mapping, reusable on another file with the same headers (D7). */
 export interface ImportTemplate {
   name: string;

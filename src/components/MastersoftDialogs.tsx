@@ -2,19 +2,22 @@ import { AlertTriangle, CheckCircle2, Download, FileSpreadsheet } from 'lucide-r
 import { useState, type ChangeEvent } from 'react';
 import { TERM_LABEL } from '../app/labels';
 import {
+  buildBatchZip,
   buildMastersoftFile,
   exportFileName,
   MastersoftFileError,
   parseMastersoftFile,
+  planAllTermsExport,
   planExport,
+  planReverseExport,
   tidy,
   type MastersoftFile,
   type MergeResult,
 } from '../app/mastersoftFile';
 import { useActiveClass, useStore } from '../app/store';
 import type { ClassRecord, Component } from '../app/types';
-import type { Term } from '../engine';
-import { downloadFile, XLSX_TYPE } from '../lib/download';
+import { TERMS, type Term } from '../engine';
+import { downloadFile, XLSX_TYPE, ZIP_TYPE } from '../lib/download';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Dialog, DialogContent } from './ui/dialog';
@@ -161,18 +164,34 @@ function ImportForm({ onDone }: { onDone: () => void }) {
 }
 
 /** Download the Class Standing and Written Exam upload files for one term (D34). */
-export function MastersoftExportDialog({ record, term, open, onOpenChange }: { record: ClassRecord; term: Term; open: boolean; onOpenChange: (o: boolean) => void }) {
+export function MastersoftExportDialog({
+  record,
+  term,
+  open,
+  onOpenChange,
+  reverse,
+}: {
+  record: ClassRecord;
+  term: Term;
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  /** Final Rating Only mode: all three terms, with marks solved from each target. */
+  reverse?: boolean;
+}) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        title={`Export ${TERM_LABEL[term]} for Mastersoft`}
+        title={reverse ? 'Export Final Rating Only for Mastersoft' : `Export ${TERM_LABEL[term]} for Mastersoft`}
         description="Upload each file in Grade Encoding → Upload Grade Encoding, on the matching row."
         className="sm:w-[40rem]"
       >
         {open && (
-          <div className="space-y-4">
-            <ExportCard record={record} term={term} component="CS" />
-            <ExportCard record={record} term={term} component="WE" />
+          <div className="max-h-[65vh] space-y-4 overflow-y-auto">
+            <DownloadAllCard record={record} reverse={reverse} />
+            {(reverse ? TERMS : [term]).flatMap((t) => [
+              <ExportCard key={`${t}CS`} record={record} term={t} component="CS" reverse={reverse} />,
+              <ExportCard key={`${t}WE`} record={record} term={t} component="WE" reverse={reverse} />,
+            ])}
           </div>
         )}
       </DialogContent>
@@ -180,8 +199,8 @@ export function MastersoftExportDialog({ record, term, open, onOpenChange }: { r
   );
 }
 
-function ExportCard({ record, term, component }: { record: ClassRecord; term: Term; component: Component }) {
-  const plan = planExport(record, term, component);
+function ExportCard({ record, term, component, reverse }: { record: ClassRecord; term: Term; component: Component; reverse?: boolean }) {
+  const plan = reverse ? planReverseExport(record, term, component) : planExport(record, term, component);
   const [outOf, setOutOf] = useState(plan.total === null ? '' : String(plan.total));
   const outOfMatches = plan.total !== null && outOf.trim() !== '' && Number(outOf) === plan.total;
   const canDownload = plan.blockers.length === 0 && outOfMatches;
@@ -259,6 +278,44 @@ function ExportCard({ record, term, component }: { record: ClassRecord; term: Te
           <Download /> Download
         </Button>
       </div>
+    </section>
+  );
+}
+
+/** One zip with every ready upload file: 3 terms × Class Standing and Written Exam. */
+function DownloadAllCard({ record, reverse }: { record: ClassRecord; reverse?: boolean }) {
+  const batch = planAllTermsExport(record, reverse);
+  const ready = batch.files.length;
+  const download = () => downloadFile(buildBatchZip(batch) as BlobPart, batch.zipName, ZIP_TYPE);
+
+  return (
+    <section className="rounded-md border border-brand/30 bg-brand/5 p-4 text-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="font-semibold">Download all terms (.zip)</h3>
+          <p className="text-xs text-slate-500">
+            {ready} of {batch.totalFiles} files ready · {batch.zipName}
+          </p>
+        </div>
+        <Button size="sm" disabled={ready === 0} onClick={download}>
+          <Download /> {ready === batch.totalFiles ? `Download ${ready} files (.zip)` : `Download ${ready} ready files (.zip)`}
+        </Button>
+      </div>
+      <p className="mt-2 text-xs text-slate-600">
+        The zip skips the “Marks Out of” check below. Before uploading, make sure each Mastersoft row's “Marks Out of” equals the Total Marks shown on its card.
+      </p>
+      {batch.blocked.length > 0 && (
+        <ul className="mt-3 space-y-1 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          {batch.blocked.map((b) => (
+            <li key={b.fileName}>
+              <strong>
+                {TERM_LABEL[b.term]} – {COMPONENT_LABEL[b.component]}:
+              </strong>{' '}
+              {b.reasons.join(' ')}
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }

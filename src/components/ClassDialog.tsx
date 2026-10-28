@@ -1,3 +1,4 @@
+import { Copy } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { SUBJECT_TYPES, subjectTypeLabel } from '../app/labels';
 import { useStore, type ClassInfo } from '../app/store';
@@ -20,7 +21,9 @@ export function ClassDialog({ open, onOpenChange, record }: { open: boolean; onO
 }
 
 function ClassForm({ record, onDone }: { record?: ClassRecord; onDone: () => void }) {
-  const { createClass, updateClassInfo, deleteClass } = useStore();
+  const { createClass, updateClassInfo, deleteClass, duplicateClassSetup } = useStore();
+  const [duplicating, setDuplicating] = useState(false);
+  const [newSection, setNewSection] = useState('');
   const [info, setInfo] = useState<ClassInfo>({
     subjectCode: record?.subjectCode ?? '',
     subjectName: record?.subjectName ?? '',
@@ -35,6 +38,11 @@ function ClassForm({ record, onDone }: { record?: ClassRecord; onDone: () => voi
     e.preventDefault();
     if (record) updateClassInfo(info);
     else createClass(info);
+    onDone();
+  };
+  const duplicate = () => {
+    if (!record || newSection.trim() === '') return;
+    duplicateClassSetup(record.id, newSection);
     onDone();
   };
   const remove = async () => {
@@ -78,6 +86,38 @@ function ClassForm({ record, onDone }: { record?: ClassRecord; onDone: () => voi
           ))}
         </Select>
       </Label>
+      {record &&
+        (duplicating ? (
+          <div className="grid gap-2 rounded-md border border-slate-200 bg-slate-50 p-3">
+            <Label>
+              Section for the copy
+              <Input
+                autoFocus
+                value={newSection}
+                placeholder="e.g. 2-B"
+                onChange={(e) => setNewSection(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter') return;
+                  e.preventDefault();
+                  duplicate();
+                }}
+              />
+            </Label>
+            <p className="text-xs text-slate-500">Copies the columns, categories and OBE tags of all 3 terms. The new class starts with no students or scores.</p>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={() => setDuplicating(false)}>
+                Cancel
+              </Button>
+              <Button size="sm" disabled={newSection.trim() === ''} onClick={duplicate}>
+                Duplicate setup
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <Button variant="outline" className="justify-self-start" onClick={() => setDuplicating(true)}>
+            <Copy /> Duplicate setup for new section…
+          </Button>
+        ))}
       <div className="mt-2 flex items-center justify-between">
         {record ? (
           <Button variant="ghost" className="text-red-600 hover:bg-red-50" onClick={() => void remove()}>

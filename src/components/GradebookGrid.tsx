@@ -1,6 +1,7 @@
-import { FileSpreadsheet, FileUp, Plus, Trash2, UserPlus } from 'lucide-react';
-import { useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
-import { assessmentTotals, csColumns, duplicateStudentIds, formatPoint, parseScore, sameIdAs, termOutcome, weColumns, type TermOutcome } from '../app/gradebook';
+import { FileSpreadsheet, FileUp, Plus, Search, Trash2, UserPlus } from 'lucide-react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
+import { displayOrder, type SortOrder } from '../app/displayOrder';
+import { assessmentTotals, csColumns, duplicateStudentIds, formatPoint, parseScore, pasteExtent, sameIdAs, termColumnStats, termOutcome, weColumns, type TermOutcome } from '../app/gradebook';
 import { STATUS_NAME, STATUSES } from '../app/labels';
 import { columnTags } from '../app/obe';
 import { useStore, type CellKey } from '../app/store';
@@ -10,6 +11,7 @@ import { cn } from '../lib/utils';
 import { confirmAction } from './ConfirmDialog';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
+import { Input, Select } from './ui/input';
 
 // Pinned left columns: #, Student ID, Student Name, Status.
 const LEFT = [
@@ -35,7 +37,12 @@ interface Props {
   onImportExcel: () => void;
 }
 
+type PasteNote = { kind: 'ok'; rows: number; columns: number } | { kind: 'overflow'; written: number; overflow: number };
+
 let lastCell: { row: number; col: number } | undefined;
+
+/** Asks the grid to drop its student search (a jump to a hidden row needs the row back). */
+const CLEAR_FILTER = 'gradebook:clear-filter';
 
 /** The grid cell that last had focus (buttons outside the grid take focus away from it). */
 export const lastFocusedCell = () => lastCell;
@@ -44,8 +51,14 @@ export const lastFocusedCell = () => lastCell;
  * Focuses a grid cell by row and editable-column index (0 = ID, 1 = name, 2+ = scores,
  * 'status' = the Status dropdown). With `flash`, the row lights up briefly so it is easy to spot.
  */
-export function focusGridCell(row: number, col: number | 'status', flash = false) {
+export function focusGridCell(row: number, col: number | 'status', flash = false, retried = false) {
   let el = document.querySelector<HTMLInputElement | HTMLSelectElement>(`[data-cell="${row}:${col}"]`);
+  // The student search may be hiding this row: clear it, then try again once the grid has redrawn.
+  if (!el && !retried && document.querySelector('[data-filtered]')) {
+    window.dispatchEvent(new Event(CLEAR_FILTER));
+    requestAnimationFrame(() => requestAnimationFrame(() => focusGridCell(row, col, flash, true)));
+    return;
+  }
   // A carried-forward status can't be changed in this term; go to the name instead.
   if (el?.disabled) el = document.querySelector<HTMLInputElement>(`[data-cell="${row}:1"]`);
   if (!el) return;
@@ -80,9 +93,27 @@ export function GradebookGrid({ record, term, onEditColumn, onAddColumn, onAddSt
     return () => observer.disconnect();
   }, []);
 
+  const stats = useMemo(() => termColumnStats(record, term), [record, term]);
   const outcomes = useMemo(() => record.students.map((s) => termOutcome(record, s, term)), [record, term]);
   const fromMastersoft = record.students.some((s) => s.mastersoft);
   const duplicates = useMemo(() => duplicateStudentIds(record.students), [record.students]);
+
+  // Search and sort change only what is shown: row numbers, cell ids and the record keep their own order.
+  const [query, setQuery] = useState('');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('mastersoft');
+  const searchRef = useRef<HTMLInputElement>(null);
+  const displayRows = useMemo(() => displayOrder(record.students, query, sortOrder), [record.students, query, sortOrder]);
+  useEffect(() => {
+    const clear = () => setQuery('');
+    window.addEventListener(CLEAR_FILTER, clear);
+    return () => window.removeEventListener(CLEAR_FILTER, clear);
+  }, []);
+  // A student added while a search is active would be hidden: show everyone again.
+  const studentCount = useRef(record.students.length);
+  useEffect(() => {
+    if (record.students.length > studentCount.current) setQuery('');
+    studentCount.current = record.students.length;
+  }, [record.students.length]);
 
   // Editable cells, in order: Student ID, Name, then each score column.
   const keys: CellKey[] = ['studentId', 'name', ...scoreColumns.map((c) => ({ columnId: c.id }))];
@@ -98,16 +129,20 @@ export function GradebookGrid({ record, term, onEditColumn, onAddColumn, onAddSt
     const input = e.currentTarget;
     const atStart = input.selectionStart === 0 && input.selectionEnd === 0;
     const atEnd = input.selectionStart === input.value.length && input.selectionEnd === input.value.length;
+    const at = displayRows.indexOf(row);
     if (e.key === 'ArrowDown' || (e.key === 'Enter' && !e.shiftKey)) {
       e.preventDefault();
-      if (row + 1 < record.students.length) focusCell(row + 1, col);
-      else if (e.key === 'Enter') {
+      const next = displayRows[at + 1];
+      if (next !== undefined) focusCell(next, col);
+      else if (e.key === 'Enter' && !query.trim()) {
+        const added = record.students.length;
         addStudent();
-        setTimeout(() => focusCell(row + 1, col));
+        setTimeout(() => focusCell(added, col));
       }
     } else if (e.key === 'ArrowUp' || (e.key === 'Enter' && e.shiftKey)) {
       e.preventDefault();
-      focusCell(row - 1, col);
+      const previous = displayRows[at - 1];
+      if (previous !== undefined) focusCell(previous, col);
     } else if (e.key === 'ArrowLeft' && atStart) {
       e.preventDefault();
       focusCell(row, col - 1);
@@ -123,8 +158,18 @@ export function GradebookGrid({ record, term, onEditColumn, onAddColumn, onAddSt
     if (!/[\t\n]/.test(text.replace(/\r?\n$/, ''))) return;
     e.preventDefault();
     const rows = text.replace(/\r?\n$/, '').split(/\r?\n/).map((line) => line.split('\t'));
-    pasteBlock(row, keys, col, rows);
+    pasteBlock(row, keys, col, rows, displayRows.slice(displayRows.indexOf(row)));
+    const { overflow, written } = pasteExtent(rows, keys.length, col);
+    setPasteNote(overflow > 0 ? { kind: 'overflow', written, overflow } : { kind: 'ok', rows: rows.length, columns: written });
   };
+
+  // Feedback after a multi-cell paste: a short toast, or a longer banner when columns were skipped.
+  const [pasteNote, setPasteNote] = useState<PasteNote | null>(null);
+  useEffect(() => {
+    if (!pasteNote) return;
+    const timer = setTimeout(() => setPasteNote(null), pasteNote.kind === 'ok' ? 3000 : 12000);
+    return () => clearTimeout(timer);
+  }, [pasteNote]);
 
   const cellInput = (student: Student, row: number, col: number, value: string, onChange: (v: string) => void, extra?: { invalid?: string; numeric?: boolean; label: string }) => (
     <input
@@ -174,20 +219,71 @@ export function GradebookGrid({ record, term, onEditColumn, onAddColumn, onAddSt
   const th = 'border-b border-r border-slate-200 bg-slate-100 px-2 py-1.5 text-left text-xs font-semibold text-slate-600';
   const td = 'border-b border-r border-slate-200 p-0';
   const pinned = 'sticky z-10';
+  // Statistics row: stays at the bottom of the scroll area, like the header stays at the top.
+  const foot = 'sticky bottom-0 border-t-2 border-t-slate-300 border-b border-r border-b-slate-200 border-r-slate-200 bg-slate-100 text-xs font-semibold text-slate-700';
   // Row highlight on hover and while a cell in the row has focus.
   const rowBg = 'bg-white group-hover:bg-slate-50 group-focus-within:bg-sky-50';
-  const columnCount = 4 + Math.max(cs.length, 1) + Math.max(we.length, 1) + 2 + outputs.length;
+  const columnCount = 4 + Math.max(cs.length, 1) + Math.max(we.length, 1) + 1 + outputs.length;
   const addPlaceholder = (component: Component) => (
-    <th className={cn(th, 'p-1 font-normal', component === 'CS' ? 'bg-sky-50/60' : 'bg-violet-50/60')}>
+    <th className={cn(th, 'min-w-32 p-1 font-normal', component === 'CS' ? 'bg-sky-50/60' : 'bg-violet-50/60')}>
       <Button size="sm" variant="ghost" className="h-7 w-full px-2 text-xs text-slate-600" onClick={() => onAddColumn(component)}>
         <Plus /> Add {component} column
       </Button>
     </th>
   );
 
+  // Ctrl+F (Cmd+F) inside the grid searches students instead of the whole page.
+  const onGridKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'f') {
+      e.preventDefault();
+      searchRef.current?.focus();
+      searchRef.current?.select();
+    }
+  };
+  const filtered = displayRows.length !== record.students.length;
+
   return (
-    <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto bg-white">
-      <table ref={tableRef} className="min-w-full border-separate border-spacing-0 text-sm">
+    <div className="relative flex min-h-0 flex-1 flex-col" onKeyDown={onGridKeyDown}>
+      {record.students.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-4 py-1.5 text-xs text-slate-600">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
+            <Input
+              ref={searchRef}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => e.key === 'Escape' && setQuery('')}
+              placeholder="Find student (Ctrl+F)..."
+              aria-label="Find student by ID or name"
+              className="h-8 w-60 pl-7 text-xs"
+            />
+          </div>
+          <label className="flex items-center gap-1.5">
+            Order
+            <Select
+              value={sortOrder}
+              onChange={(e) => setSortOrder(e.target.value as SortOrder)}
+              aria-label="Row order"
+              title="Only changes how rows are listed here. The Mastersoft export keeps Mastersoft's order."
+              className="h-8 w-auto text-xs"
+            >
+              <option value="mastersoft">Mastersoft default</option>
+              <option value="name-asc">Name (A–Z)</option>
+              <option value="id-asc">Student ID</option>
+            </Select>
+          </label>
+          {filtered && (
+            <span className="flex items-center gap-1.5 text-slate-500">
+              Showing {displayRows.length} of {record.students.length} students
+              <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={() => setQuery('')}>
+                Clear
+              </Button>
+            </span>
+          )}
+        </div>
+      )}
+      <div ref={scrollRef} data-filtered={query.trim() ? '' : undefined} className="min-h-0 flex-1 overflow-auto bg-white">
+      <table ref={tableRef} className="border-separate border-spacing-0 text-sm">
         <thead className="sticky top-0 z-20">
           <tr>
             {['#', 'Student ID', 'Student Name', 'Status'].map((h, i) => (
@@ -201,12 +297,11 @@ export function GradebookGrid({ record, term, onEditColumn, onAddColumn, onAddSt
             <th colSpan={Math.max(we.length, 1)} className={cn(th, 'whitespace-nowrap bg-violet-50 text-center text-violet-900')}>
               Written Exam
             </th>
-            <th rowSpan={2} className={cn(th, 'w-12')}>
+            <th rowSpan={2} className={cn(th, 'w-10 text-center')}>
               <Button size="icon" variant="ghost" onClick={() => onAddColumn()} aria-label="Add column" title="Add column">
                 <Plus />
               </Button>
             </th>
-            <th rowSpan={2} className="w-full border-b border-slate-200 bg-slate-100" />
             {outputs.map((o, i) => (
               <th
                 key={o.key}
@@ -222,7 +317,7 @@ export function GradebookGrid({ record, term, onEditColumn, onAddColumn, onAddSt
           <tr>
             {cs.length === 0 && addPlaceholder('CS')}
             {scoreColumns.map((c) => (
-              <th key={c.id} className={cn(th, 'min-w-20 p-0', c.component === 'CS' ? 'bg-sky-50/60' : 'bg-violet-50/60')}>
+              <th key={c.id} className={cn(th, 'min-w-24 w-28 p-0', c.component === 'CS' ? 'bg-sky-50/60' : 'bg-violet-50/60')}>
                 <button onClick={() => onEditColumn(c)} className="w-full px-2 py-1.5 text-left hover:bg-white/70" title="Edit column">
                   <div className="truncate">{c.label}</div>
                   <div className="tabular text-[11px] font-normal text-slate-500">
@@ -237,7 +332,8 @@ export function GradebookGrid({ record, term, onEditColumn, onAddColumn, onAddSt
           </tr>
         </thead>
         <tbody>
-          {record.students.map((student, row) => {
+          {displayRows.map((row) => {
+            const student = record.students[row]!;
             const outcome = outcomes[row]!;
             const ownStatus = student.statuses[term];
             const carried = outcome.kind === 'status' && outcome.carried;
@@ -320,8 +416,7 @@ export function GradebookGrid({ record, term, onEditColumn, onAddColumn, onAddSt
                   );
                 })}
                 {we.length === 0 && <td className={td} />}
-                <td className="border-b border-slate-200" />
-                <td className="border-b border-slate-200" />
+                <td className="border-b border-r border-slate-200 bg-slate-50/20" />
                 {outputs.map((o, i) => (
                   <td key={o.key} style={outStyle(i)} className={cn(td, 'z-10 bg-[#fdf6f6]', i === 0 && 'border-l-2 border-l-brand/40')}>
                     <button
@@ -340,6 +435,13 @@ export function GradebookGrid({ record, term, onEditColumn, onAddColumn, onAddSt
               </tr>
             );
           })}
+          {record.students.length > 0 && displayRows.length === 0 && (
+            <tr>
+              <td colSpan={columnCount} className="p-0">
+                <p className="sticky left-0 px-6 py-6 text-sm text-slate-500">No student matches “{query.trim()}”.</p>
+              </td>
+            </tr>
+          )}
           {record.students.length === 0 ? (
             <tr>
               <td colSpan={columnCount} className="p-0">
@@ -376,7 +478,85 @@ export function GradebookGrid({ record, term, onEditColumn, onAddColumn, onAddSt
             </tr>
           )}
         </tbody>
+        {record.students.length > 0 && (
+          <tfoot>
+            <tr>
+              <td colSpan={4} style={{ left: 0 }} className={cn(foot, 'z-30 px-2 py-1.5 text-slate-700')}>
+                Class Average
+                <span className="ml-1.5 font-normal text-slate-500">({stats.graded} graded)</span>
+              </td>
+              {cs.length === 0 && <td className={cn(foot, 'z-20')} />}
+              {scoreColumns.map((c) => {
+                const st = stats.columns[c.id];
+                return (
+                  <td key={c.id} className={cn(foot, 'z-20 px-2 py-1 text-right')} title={st && st.count ? `${st.count} graded` : 'No scores yet'}>
+                    {st?.average != null ? (
+                      <>
+                        <div className="tabular">{st.average}</div>
+                        <div className="tabular text-[11px] font-normal text-slate-500">{st.averagePct?.toFixed(1)}%</div>
+                      </>
+                    ) : (
+                      <span className="font-normal text-slate-400">—</span>
+                    )}
+                  </td>
+                );
+              })}
+              {we.length === 0 && <td className={cn(foot, 'z-20')} />}
+              <td className={cn(foot, 'z-20')} />
+              {outputs.map((o, i) => (
+                <td key={o.key} style={outStyle(i)} className={cn(foot, 'z-30 px-2 py-1 text-right', i === 0 && 'border-l-2 border-l-brand/40')}>
+                  {o.key === 'tg' &&
+                    (stats.meanTermGrade !== null ? (
+                      <span className="tabular" title="Mean Term Grade of graded students">
+                        {stats.meanTermGrade}
+                      </span>
+                    ) : (
+                      <span className="font-normal text-slate-400">—</span>
+                    ))}
+                  {o.key === 'pg' &&
+                    (stats.passedPct !== null ? (
+                      <Badge variant={stats.failedCount === 0 ? 'green' : 'amber'} title={`${stats.passedCount} passed, ${stats.failedCount} failed`}>
+                        {stats.passedPct}% passed
+                      </Badge>
+                    ) : (
+                      <span className="font-normal text-slate-400">—</span>
+                    ))}
+                </td>
+              ))}
+            </tr>
+          </tfoot>
+        )}
       </table>
+      </div>
+      {pasteNote?.kind === 'ok' && (
+        <div role="status" className="pointer-events-none absolute bottom-4 left-1/2 z-30 -translate-x-1/2 rounded-md bg-slate-800/90 px-3 py-1.5 text-xs text-white shadow-lg">
+          Pasted {pasteNote.rows} {pasteNote.rows === 1 ? 'row' : 'rows'} × {pasteNote.columns} {pasteNote.columns === 1 ? 'column' : 'columns'}.
+        </div>
+      )}
+      {pasteNote?.kind === 'overflow' && (
+        <div
+          role="alert"
+          className="absolute bottom-4 left-1/2 z-30 flex w-max max-w-[calc(100%-2rem)] -translate-x-1/2 flex-wrap items-center gap-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 shadow-lg"
+        >
+          <span>
+            Pasted {pasteNote.written} {pasteNote.written === 1 ? 'column' : 'columns'}. {pasteNote.overflow} extra column(s) from Excel were skipped because there are no matching
+            columns.
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setPasteNote(null);
+              onAddColumn(scoreColumns.at(-1)?.component);
+            }}
+          >
+            <Plus /> Add column
+          </Button>
+          <button type="button" onClick={() => setPasteNote(null)} className="text-amber-800 hover:text-amber-950" aria-label="Dismiss">
+            ✕
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -449,11 +629,11 @@ function OutputCell({ outcome, column, first }: { outcome: TermOutcome; column: 
 
 /** Compact CO and LO pills under a column header. */
 function ObeTags({ record, column }: { record: ClassRecord; column: Column }) {
-  const { cos, los } = columnTags(record.obe, column);
+  const { cos, los, coText } = columnTags(record.obe, column);
   if (cos.length === 0 && los.length === 0) return null;
   return (
-    <div className="mt-0.5 flex flex-wrap gap-0.5" title={[...cos, ...los].join(', ')}>
-      {cos.length > 0 && <span className="rounded bg-brand/10 px-1 text-[10px] font-semibold leading-4 text-brand">{cos.join(' · ')}</span>}
+    <div className="mt-0.5 flex flex-wrap gap-0.5" title={[coText, ...los].filter(Boolean).join(', ')}>
+      {cos.length > 0 && <span className="rounded bg-brand/10 px-1 text-[10px] font-semibold leading-4 text-brand">{coText}</span>}
       {los.length > 0 && <span className="rounded bg-slate-200/70 px-1 text-[10px] font-medium leading-4 text-slate-600">{los.join(' · ')}</span>}
     </div>
   );

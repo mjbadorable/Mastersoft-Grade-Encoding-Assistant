@@ -1,23 +1,26 @@
-import { AlertTriangle, BookOpenCheck, Check, Copy, Crosshair, FileDown, FileSpreadsheet, FileUp, Keyboard, Plus, SlidersHorizontal, UserPlus } from 'lucide-react';
-import { useMemo, useState, type ReactNode } from 'react';
-import { assessmentTotals, csColumns, termSetupIssues, weColumns } from '../app/gradebook';
+import { AlertTriangle, BookOpenCheck, Check, Copy, CopyPlus, Crosshair, FileDown, FileSpreadsheet, FileUp, Keyboard, Plus, Redo2, SlidersHorizontal, Undo2, UserPlus } from 'lucide-react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { assessmentTotals, categoryIssues, csColumns, weColumns } from '../app/gradebook';
 import { SUBJECT_TYPES, subjectTypeLabel, TERM_LABEL, termWeightLabel } from '../app/labels';
 import { columnTags } from '../app/obe';
 import { nextProblem, termProgress, type TermProgress } from '../app/progress';
-import { useStore } from '../app/store';
+import { useHistoryLabels, useStore } from '../app/store';
 import type { ClassRecord, Column, Component, CsMode } from '../app/types';
-import { withCarryForward, type SubjectType, type Term } from '../engine';
+import { TERMS, withCarryForward, type SubjectType, type Term } from '../engine';
 import { CategoriesDialog, ColumnDialog } from './ColumnDialogs';
 import { EncodingGuideDialog } from './EncodingGuide';
 import { ExcelImportDialog } from './ExcelImportDialog';
 import { focusGridCell, GradebookGrid, lastFocusedCell } from './GradebookGrid';
 import { MastersoftExportDialog, MastersoftImportDialog } from './MastersoftDialogs';
+import { ShortcutsDialog } from './ShortcutsDialog';
 import { Button } from './ui/button';
+import { Dialog, DialogContent } from './ui/dialog';
 import { Select } from './ui/input';
 import { WorkflowGuide } from './WorkflowGuide';
 
 export function TermGradebook({ record, term }: { record: ClassRecord; term: Term }) {
-  const { updateClassInfo, setCsMode, addStudent, setView } = useStore();
+  const { updateClassInfo, setCsMode, addStudent, setView, undo, redo, copyTermSetup } = useStore();
+  const history = useHistoryLabels();
   const setup = record.terms[term];
   const [columnDialog, setColumnDialog] = useState<Column | 'new' | null>(null);
   const [newComponent, setNewComponent] = useState<Component>('CS');
@@ -26,6 +29,8 @@ export function TermGradebook({ record, term }: { record: ClassRecord; term: Ter
   const [importOpen, setImportOpen] = useState(false);
   const [mastersoftOpen, setMastersoftOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [replaceFrom, setReplaceFrom] = useState<Term | null>(null);
   const weighted = setup.csMode === 'WEIGHTED_CATEGORIES';
   const progress = useMemo(() => termProgress(record, term), [record, term]);
   const totals = assessmentTotals(setup);
@@ -58,6 +63,43 @@ export function TermGradebook({ record, term }: { record: ClassRecord; term: Ter
     if (t) focusGridCell(t.row, t.focus, true);
   };
   const goToNextProblem = () => jump('all');
+  /** Other terms of this class that already have columns to copy from. */
+  const copySources = TERMS.filter((t) => t !== term && record.terms[t].columns.length > 0);
+  /** Copies straight away into an empty term; asks first when columns would be replaced. */
+  const copyFrom = (from: Term) => (setup.columns.length === 0 ? copyTermSetup(from, term) : setReplaceFrom(from));
+
+  // Ctrl+Z undoes, Ctrl+Y or Ctrl+Shift+Z redoes (Cmd on a Mac). Text boxes outside the grid and
+  // open dialogs keep their own undo; grid cells save as you type, so their native undo is unused.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+      const key = e.key.toLowerCase();
+      const isUndo = key === 'z' && !e.shiftKey;
+      const isRedo = key === 'y' || (key === 'z' && e.shiftKey);
+      if (!isUndo && !isRedo) return;
+      const target = e.target instanceof HTMLElement ? e.target : null;
+      if (target?.closest('[role="dialog"]')) return;
+      if (target?.matches('input, textarea, select, [contenteditable]') && !target.hasAttribute('data-cell')) return;
+      e.preventDefault();
+      (isUndo ? undo : redo)();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [undo, redo]);
+
+  // "?" opens the shortcut list, unless the teacher is typing or a dialog is open.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== '?' || e.ctrlKey || e.metaKey || e.altKey) return;
+      const target = e.target instanceof HTMLElement ? e.target : null;
+      if (target?.matches('input, textarea, select, [contenteditable]')) return;
+      if (document.querySelector('[role="dialog"]')) return;
+      e.preventDefault();
+      setShortcutsOpen(true);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   return (
     <>
@@ -94,11 +136,44 @@ export function TermGradebook({ record, term }: { record: ClassRecord; term: Ter
           </Button>
         )}
         <div className="ml-auto flex flex-wrap gap-2">
+          {copySources.length > 0 && (
+            <Select
+              aria-label="Copy setup from another term"
+              title="Copy the columns, categories and Class Standing mode of another term. Scores are not copied."
+              value=""
+              onChange={(e) => e.target.value && copyFrom(e.target.value as Term)}
+              className="h-8 w-auto text-xs"
+            >
+              <option value="">Copy setup…</option>
+              {copySources.map((t) => (
+                <option key={t} value={t}>
+                  From {TERM_LABEL[t]}
+                </option>
+              ))}
+            </Select>
+          )}
+          <Button
+            size="icon"
+            variant="outline"
+            onClick={undo}
+            disabled={!history.undo}
+            aria-label="Undo"
+            title={history.undo ? `Undo: ${history.undo} (Ctrl+Z)` : 'Nothing to undo'}
+          >
+            <Undo2 />
+          </Button>
+          <Button
+            size="icon"
+            variant="outline"
+            onClick={redo}
+            disabled={!history.redo}
+            aria-label="Redo"
+            title={history.redo ? `Redo: ${history.redo} (Ctrl+Y)` : 'Nothing to redo'}
+          >
+            <Redo2 />
+          </Button>
           <Button size="sm" variant="outline" onClick={() => setImportOpen(true)}>
             <FileUp /> Import Excel
-          </Button>
-          <Button size="sm" variant="outline" onClick={addStudentAndFocus}>
-            <UserPlus /> Add student
           </Button>
           <Button size="sm" onClick={() => addColumn()}>
             <Plus /> Add column
@@ -116,6 +191,9 @@ export function TermGradebook({ record, term }: { record: ClassRecord; term: Ter
             { label: 'Type in', icon: <UserPlus />, onClick: addStudentAndFocus },
           ],
           columns: [
+            ...(setup.columns.length === 0
+              ? copySources.map((t) => ({ label: `Copy from ${TERM_LABEL[t]}`, icon: <CopyPlus />, onClick: () => copyFrom(t) }))
+              : []),
             { label: 'Add CS column', icon: <Plus />, onClick: () => addColumn('CS') },
             { label: 'Add WE column', icon: <Plus />, onClick: () => addColumn('WE') },
             ...(weighted ? [{ label: 'Categories', icon: <SlidersHorizontal />, onClick: () => setCategoriesOpen(true) }] : []),
@@ -131,7 +209,7 @@ export function TermGradebook({ record, term }: { record: ClassRecord; term: Ter
         }}
       />
 
-      <AssessmentBanner record={record} term={term}>
+      <AssessmentBanner record={record} term={term} onAddColumn={addColumn}>
         <Button size="sm" variant="outline" onClick={() => setGuideOpen(true)}>
           <BookOpenCheck /> Encoding guide
         </Button>
@@ -150,7 +228,7 @@ export function TermGradebook({ record, term }: { record: ClassRecord; term: Ter
         onImportExcel={() => setImportOpen(true)}
       />
 
-      <StatusBar progress={progress} record={record} term={term} targets={targets} onJump={jump} onSummary={() => setView('SUMMARY')} />
+      <StatusBar progress={progress} record={record} term={term} targets={targets} onJump={jump} onSummary={() => setView('SUMMARY')} onShortcuts={() => setShortcutsOpen(true)} />
 
       <ColumnDialog
         term={term}
@@ -165,7 +243,28 @@ export function TermGradebook({ record, term }: { record: ClassRecord; term: Ter
       <ExcelImportDialog term={term} open={importOpen} onOpenChange={setImportOpen} />
       <EncodingGuideDialog record={record} term={term} open={guideOpen} onOpenChange={setGuideOpen} />
       <MastersoftExportDialog record={record} term={term} open={exportOpen} onOpenChange={setExportOpen} />
+      <Dialog open={replaceFrom !== null} onOpenChange={(open) => !open && setReplaceFrom(null)}>
+        <DialogContent
+          title={`Replace the ${TERM_LABEL[term]} setup?`}
+          description={`This term already has ${setup.columns.length} column${setup.columns.length === 1 ? '' : 's'}. They will be replaced by the columns, categories and Class Standing mode of ${replaceFrom ? TERM_LABEL[replaceFrom] : ''}, and scores already typed into them will be removed. You can undo this.`}
+        >
+          <div className="flex justify-end gap-2 px-5 py-4">
+            <Button variant="outline" onClick={() => setReplaceFrom(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (replaceFrom) copyTermSetup(replaceFrom, term);
+                setReplaceFrom(null);
+              }}
+            >
+              Replace setup
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       <CategoriesDialog term={term} setup={setup} open={categoriesOpen} onOpenChange={setCategoriesOpen} />
+      <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
     </>
   );
 }
@@ -185,9 +284,10 @@ interface StatusBarProps {
   targets: Record<JumpKind, JumpTarget[]>;
   onJump: (kind: JumpKind) => void;
   onSummary: () => void;
+  onShortcuts: () => void;
 }
 
-function StatusBar({ progress: p, record, term, targets, onJump, onSummary }: StatusBarProps) {
+function StatusBar({ progress: p, record, term, targets, onJump, onSummary, onShortcuts }: StatusBarProps) {
   const chip = 'inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium transition hover:ring-2 hover:ring-current/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current/50';
   /** Tooltip listing who a button points to. */
   const who = (kind: JumpKind, heading: string) => {
@@ -242,19 +342,24 @@ function StatusBar({ progress: p, record, term, targets, onJump, onSummary }: St
       ) : (
         <span>Follow the steps above to start.</span>
       )}
-      <span className="ml-auto flex items-center gap-1.5 text-slate-400">
+      <button
+        onClick={onShortcuts}
+        className="ml-auto flex items-center gap-1.5 rounded px-1.5 py-0.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+        title="Enter or ↓ next row · ← → move · paste a block from Excel · click a grade for its breakdown"
+      >
         <Keyboard className="size-3.5" />
-        Enter or ↓ next row · ← → move · paste a block from Excel · click a grade for its breakdown
-      </span>
+        Keyboard shortcuts (?)
+      </button>
     </div>
   );
 }
 
 /** Mirrors Mastersoft's Assessment Component screen: the Total Marks to encode. */
-function AssessmentBanner({ record, term, children }: { record: ClassRecord; term: Term; children?: ReactNode }) {
+function AssessmentBanner({ record, term, onAddColumn, children }: { record: ClassRecord; term: Term; onAddColumn: (component: Component) => void; children?: ReactNode }) {
   const setup = record.terms[term];
   const totals = assessmentTotals(setup);
-  const issues = termSetupIssues(setup);
+  // Missing columns are already shown by the step strip and the empty Total Marks cards; only category errors need a warning here.
+  const issues = categoryIssues(setup);
   /** Union of the CO codes on a component's columns, for Mastersoft's TAG CO button. */
   const tagCo = (columns: Column[]) => {
     const tagged = new Set(columns.flatMap((c) => columnTags(record.obe, c).cos));
@@ -273,8 +378,9 @@ function AssessmentBanner({ record, term, children }: { record: ClassRecord; ter
           value={totals.cs}
           note={setup.csMode === 'WEIGHTED_CATEGORIES' ? 'Weighted categories: always 100' : undefined}
           tagCo={tagCo(csColumns(setup))}
+          onSetup={() => onAddColumn('CS')}
         />
-        <TotalCard label={`${TERM_LABEL[term]} – Written Exam`} value={totals.we} tagCo={tagCo(weColumns(setup))} />
+        <TotalCard label={`${TERM_LABEL[term]} – Written Exam`} value={totals.we} tagCo={tagCo(weColumns(setup))} onSetup={() => onAddColumn('WE')} />
         {issues.length > 0 && (
           <div className="flex min-w-64 flex-1 items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
             <AlertTriangle className="mt-0.5 size-4 shrink-0" />
@@ -291,7 +397,7 @@ function AssessmentBanner({ record, term, children }: { record: ClassRecord; ter
   );
 }
 
-function TotalCard({ label, value, note, tagCo }: { label: string; value: number | null; note?: string; tagCo: string[] }) {
+export function TotalCard({ label, value, note, tagCo = [], onSetup }: { label: string; value: number | null; note?: string; tagCo?: string[]; onSetup?: () => void }) {
   const [copied, setCopied] = useState(false);
   const copy = () => {
     if (value === null) return;
@@ -312,7 +418,13 @@ function TotalCard({ label, value, note, tagCo }: { label: string; value: number
         )}
       </div>
       <div className="tabular text-2xl font-semibold text-slate-900" aria-label={`${label} Total Marks`}>
-        {value ?? '—'}
+        {value === null && onSetup ? (
+          <button onClick={onSetup} className="text-sm font-medium text-brand underline-offset-2 hover:underline">
+            + Add column
+          </button>
+        ) : (
+          (value ?? '—')
+        )}
       </div>
       {value !== null && (
         <Button variant="ghost" size="icon" onClick={copy} aria-label={`Copy ${label} Total Marks`} title="Copy">

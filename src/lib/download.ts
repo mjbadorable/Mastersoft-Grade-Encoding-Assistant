@@ -9,3 +9,4 @@ export function downloadFile(data: BlobPart, fileName: string, type: string) {
 }
 
 export const XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+export const ZIP_TYPE = 'application/zip';
