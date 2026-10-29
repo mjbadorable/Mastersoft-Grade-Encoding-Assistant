@@ -21,7 +21,7 @@ export function ClassDialog({ open, onOpenChange, record }: { open: boolean; onO
 }
 
 function ClassForm({ record, onDone }: { record?: ClassRecord; onDone: () => void }) {
-  const { createClass, updateClassInfo, deleteClass, duplicateClassSetup } = useStore();
+  const { createClass, updateClassInfo, trashClass, duplicateClassSetup } = useStore();
   const [duplicating, setDuplicating] = useState(false);
   const [newSection, setNewSection] = useState('');
   const [info, setInfo] = useState<ClassInfo>({
@@ -49,12 +49,12 @@ function ClassForm({ record, onDone }: { record?: ClassRecord; onDone: () => voi
     if (!record) return;
     const name = [record.subjectCode, record.section].filter(Boolean).join(' · ') || 'this class';
     const ok = await confirmAction({
-      title: 'Delete class?',
-      message: `${name} and all its students and scores will be removed from this browser. Download a backup first if you may need it again.`,
-      confirmLabel: 'Delete class',
+      title: 'Move class to trash?',
+      message: `${name} will leave your class list. You can restore it at any time from the Trash tab in All classes overview.`,
+      confirmLabel: 'Move to Trash',
     });
     if (!ok) return;
-    deleteClass(record.id);
+    trashClass(record.id);
     onDone();
   };
   return (
@@ -120,9 +120,12 @@ function ClassForm({ record, onDone }: { record?: ClassRecord; onDone: () => voi
         ))}
       <div className="mt-2 flex items-center justify-between">
         {record ? (
-          <Button variant="ghost" className="text-red-600 hover:bg-red-50" onClick={() => void remove()}>
-            Delete class
-          </Button>
+          <div>
+            <Button variant="ghost" className="text-red-600 hover:bg-red-50" onClick={() => void remove()}>
+              Move to trash
+            </Button>
+            <p className="px-3 text-[11px] text-slate-500">Restore it later from the Trash tab in All classes overview.</p>
+          </div>
         ) : (
           <span />
         )}

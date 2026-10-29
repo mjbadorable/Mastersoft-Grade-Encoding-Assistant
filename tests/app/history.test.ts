@@ -152,7 +152,7 @@ describe('undo / redo', () => {
 
   it('forgets the history of a deleted class', async () => {
     await seed();
-    store().deleteClass('A');
+    store().deleteClassPermanent('A');
     expect(store().history.A).toBeUndefined();
     await saved();
   });

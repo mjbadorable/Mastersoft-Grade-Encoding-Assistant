@@ -19,6 +19,7 @@ import { SaveErrorBanner, SaveIndicator } from './components/SaveStatus';
 import { Sidebar } from './components/Sidebar';
 import { TermGradebook } from './components/TermGradebook';
 import { TransmutationReference } from './components/TransmutationReference';
+import { TrashNotice } from './components/TrashNotice';
 import { Button } from './components/ui/button';
 import { rules } from './engine';
 
@@ -103,6 +104,7 @@ export function App() {
       {active && <BreakdownDrawer record={active} />}
       <ClassDialog open={newClass} onOpenChange={setNewClass} />
       <ConfirmHost />
+      <TrashNotice />
       <MastersoftImportDialog open={importOpen} onOpenChange={setImportOpen} />
       <PrivacyNotice
         open={!noticeSeen || privacyOpen}

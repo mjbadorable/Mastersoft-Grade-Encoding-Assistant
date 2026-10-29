@@ -2,7 +2,7 @@ import { BookOpen, Calculator, CheckCircle2, ClipboardList, FileUp, LayoutGrid, 
 import { useEffect, useState, type ReactNode } from 'react';
 import { TERM_LABEL, termWeightLabel } from '../app/labels';
 import { termProgress } from '../app/progress';
-import { useActiveClass, useStore } from '../app/store';
+import { isLiveClass, useActiveClass, useStore } from '../app/store';
 import type { ClassRecord, View } from '../app/types';
 import { TERMS, type Term } from '../engine';
 import { cn } from '../lib/utils';
@@ -23,6 +23,8 @@ const readCollapsed = () => {
 export function Sidebar({ onPrivacy }: { onPrivacy: () => void }) {
   const { classes, view, setView, selectClass } = useStore();
   const active = useActiveClass();
+  // Archived and trashed classes stay out of the list; an archived class opened from the overview is shown so the selector isn't blank.
+  const listed = classes.filter((c) => isLiveClass(c) || (c.id === active?.id && !c.deletedAt));
   const [dialog, setDialog] = useState<'new' | 'edit' | 'import' | null>(null);
   const [collapsed, setCollapsed] = useState(readCollapsed);
 
@@ -137,12 +139,13 @@ export function Sidebar({ onPrivacy }: { onPrivacy: () => void }) {
             <PanelLeftClose className="size-4" />
           </button>
         </div>
-        {classes.length > 0 && (
+        {listed.length > 0 && (
           <Select className="w-full" value={active?.id ?? ''} onChange={(e) => selectClass(e.target.value)} aria-label="Class">
-            {classes.map((c) => (
+            {listed.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.subjectCode || 'Untitled'}
                 {c.section ? ` · ${c.section}` : ''}
+                {c.archived ? ' (archived)' : ''}
               </option>
             ))}
           </Select>

@@ -77,6 +77,10 @@ export interface ClassRecord {
   obe?: ObeConfig;
   /** The built-in sample class for exploring the app (see demoClass.ts). */
   demo?: boolean;
+  /** Tucked away from the class list; still opens from the overview's Archived tab. */
+  archived?: boolean;
+  /** Epoch ms when moved to the trash; undefined while the class is active or archived. */
+  deletedAt?: number;
   updatedAt: number;
 }
 

@@ -71,7 +71,18 @@ interface State {
   /** Adds the sample demo class, opens it and shows its Prelim gradebook. */
   loadDemoClass: () => void;
   updateClassInfo: (info: ClassInfo) => void;
-  deleteClass: (id: string) => void;
+  /** Soft delete: the class waits in the Trash (restorable) until deleted permanently. Offers an undo notice. */
+  trashClass: (id: string) => void;
+  restoreClassFromTrash: (id: string) => void;
+  archiveClass: (id: string) => void;
+  unarchiveClass: (id: string) => void;
+  /** Removes a class and its history from this browser for good. */
+  deleteClassPermanent: (id: string) => void;
+  /** Permanently deletes every class in the Trash. */
+  emptyTrash: () => void;
+  /** The class just moved to the Trash, shown as an undo notice until dismissed. */
+  trashNotice: { id: string; label: string } | null;
+  dismissTrashNotice: () => void;
   /** Clones a class's 3-term setup and OBE into a new class with no students; returns its id ('' if the source is gone). */
   duplicateClassSetup: (sourceClassId: string, newSection: string) => string;
   /** Mastersoft student list (D34): into a new class, or merged into the active one. */
@@ -115,6 +126,10 @@ interface State {
 
 const ignore = () => {};
 
+/** In the class list: neither archived nor in the Trash. */
+export const isLiveClass = (c: ClassRecord) => !c.deletedAt && !c.archived;
+const firstLiveId = (classes: ClassRecord[], except?: string) => classes.find((c) => c.id !== except && isLiveClass(c))?.id ?? null;
+
 export const useStore = create<State>()((set, get) => {
   /** Classes changed in another tab while this tab still had changes to save. */
   const staleFromOtherTabs = new Set<string>();
@@ -133,7 +148,7 @@ export const useStore = create<State>()((set, get) => {
       else if (classes.some((c) => c.id === id)) classes = classes.map((c) => (c.id === id ? saved : c));
       else classes = [saved, ...classes];
     });
-    const activeClassId = classes.some((c) => c.id === get().activeClassId) ? get().activeClassId : (classes[0]?.id ?? null);
+    const activeClassId = classes.some((c) => c.id === get().activeClassId && !c.deletedAt) ? get().activeClassId : firstLiveId(classes);
     set({ classes, activeClassId });
   };
 
@@ -199,6 +214,18 @@ export const useStore = create<State>()((set, get) => {
   /** Saves a whole record (new, restored) or deletes one. */
   const saveWhole = (classId: string, record: ClassRecord | 'delete') => queue.enqueue({ classId, change: () => record });
   const saveMeta = (key: string, value: unknown) => void setMeta(key, value).catch(ignore);
+  /** Deletes classes from the list, the undo history and storage. */
+  const removeForGood = (ids: string[]) => {
+    if (ids.length === 0) return;
+    const gone = new Set(ids);
+    const classes = get().classes.filter((c) => !gone.has(c.id));
+    const activeClassId = gone.has(get().activeClassId ?? '') ? firstLiveId(classes) : get().activeClassId;
+    const history = Object.fromEntries(Object.entries(get().history).filter(([id]) => !gone.has(id)));
+    const trashNotice = get().trashNotice && gone.has(get().trashNotice!.id) ? null : get().trashNotice;
+    set({ classes, activeClassId, history, drawer: null, trashNotice });
+    ids.forEach((id) => saveWhole(id, 'delete'));
+    if (activeClassId) saveMeta('activeClassId', activeClassId);
+  };
 
   return {
     loaded: false,
@@ -223,7 +250,8 @@ export const useStore = create<State>()((set, get) => {
           getMeta<string>('activeClassId'),
           getMeta<Record<string, string>>('backedUp'),
         ]);
-        const active = classes.find((c) => c.id === activeClassId) ?? classes[0];
+        // Open the class used last; never one in the Trash. If everything is archived, open an archived class.
+        const active = classes.find((c) => c.id === activeClassId && !c.deletedAt) ?? classes.find(isLiveClass) ?? classes.find((c) => !c.deletedAt);
         set({
           loaded: true,
           classes,
@@ -302,14 +330,49 @@ export const useStore = create<State>()((set, get) => {
       saveMeta('activeClassId', record.id);
       return record.id;
     },
-    deleteClass(id) {
-      const classes = get().classes.filter((c) => c.id !== id);
-      const activeClassId = get().activeClassId === id ? (classes[0]?.id ?? null) : get().activeClassId;
-      const { [id]: _gone, ...history } = get().history;
-      set({ classes, activeClassId, history, drawer: null });
-      saveWhole(id, 'delete');
+    trashNotice: null,
+    dismissTrashNotice: () => set({ trashNotice: null }),
+    trashClass(id) {
+      const target = get().classes.find((c) => c.id === id);
+      if (!target || target.deletedAt) return;
+      const deletedAt = Date.now();
+      const classes = get().classes.map((c) => (c.id === id ? { ...c, deletedAt, updatedAt: deletedAt } : c));
+      const activeClassId = get().activeClassId === id ? firstLiveId(classes, id) : get().activeClassId;
+      const label = [target.subjectCode, target.section].filter(Boolean).join(' · ') || 'Untitled class';
+      set({ classes, activeClassId, drawer: null, trashNotice: { id, label } });
+      queue.enqueue({ classId: id, change: (latest) => latest && { ...latest, deletedAt, updatedAt: deletedAt } });
       if (activeClassId) saveMeta('activeClassId', activeClassId);
     },
+    restoreClassFromTrash(id) {
+      const target = get().classes.find((c) => c.id === id);
+      if (!target?.deletedAt) return;
+      const restoredAt = Date.now();
+      const bring = (c: ClassRecord): ClassRecord => {
+        const { deletedAt: _out, ...rest } = c;
+        return { ...rest, updatedAt: restoredAt };
+      };
+      set({ classes: get().classes.map((c) => (c.id === id ? bring(c) : c)), activeClassId: id, drawer: null, trashNotice: null });
+      queue.enqueue({ classId: id, change: (latest) => latest && bring(latest) });
+      saveMeta('activeClassId', id);
+    },
+    archiveClass(id) {
+      const target = get().classes.find((c) => c.id === id);
+      if (!target || target.deletedAt || target.archived) return;
+      const at = Date.now();
+      const classes = get().classes.map((c) => (c.id === id ? { ...c, archived: true, updatedAt: at } : c));
+      const activeClassId = get().activeClassId === id ? firstLiveId(classes, id) : get().activeClassId;
+      set({ classes, activeClassId, drawer: null });
+      queue.enqueue({ classId: id, change: (latest) => latest && { ...latest, archived: true, updatedAt: at } });
+      if (activeClassId) saveMeta('activeClassId', activeClassId);
+    },
+    unarchiveClass(id) {
+      if (!get().classes.some((c) => c.id === id && c.archived)) return;
+      const at = Date.now();
+      set({ classes: get().classes.map((c) => (c.id === id ? { ...c, archived: false, updatedAt: at } : c)) });
+      queue.enqueue({ classId: id, change: (latest) => latest && { ...latest, archived: false, updatedAt: at } });
+    },
+    deleteClassPermanent: (id) => removeForGood([id]),
+    emptyTrash: () => removeForGood(get().classes.filter((c) => c.deletedAt !== undefined).map((c) => c.id)),
     importMastersoft(file, target) {
       if (!(target === 'active' && get().activeClassId)) {
         const first = file.rows[0]!;
