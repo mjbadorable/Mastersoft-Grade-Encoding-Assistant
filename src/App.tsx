@@ -1,4 +1,5 @@
 import { ShieldCheck } from 'lucide-react';
+import pkg from '../package.json';
 import { useEffect, useState } from 'react';
 import { TERM_LABEL } from './app/labels';
 import { useActiveClass, useStore } from './app/store';
@@ -86,6 +87,9 @@ export function App() {
         <span className="ml-auto" />
         <OfflineIndicator />
         <SaveIndicator />
+        <span className="rounded bg-white/15 px-2 py-0.5 text-xs" title="Version of this app">
+          v{pkg.version}
+        </span>
         <span className="rounded bg-white/15 px-2 py-0.5 text-xs" title="Version of the Mastersoft rules file">
           Rules v{rules.version}
         </span>
