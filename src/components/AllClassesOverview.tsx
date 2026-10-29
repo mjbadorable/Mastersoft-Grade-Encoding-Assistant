@@ -1,4 +1,4 @@
-import { AlertTriangle, Archive, ArchiveRestore, CheckCircle2, DatabaseBackup, LayoutGrid, RotateCcw, Trash2 } from 'lucide-react';
+import { AlertTriangle, Archive, ArchiveRestore, CheckCircle2, Copy, DatabaseBackup, LayoutGrid, RotateCcw, Trash2 } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 import { subjectTypeLabel, TERM_LABEL } from '../app/labels';
 import { backUpWorkspace } from '../app/backupActions';
@@ -9,6 +9,8 @@ import { TERMS } from '../engine';
 import { cn } from '../lib/utils';
 import { confirmAction } from './ConfirmDialog';
 import { Button } from './ui/button';
+import { Dialog, DialogContent } from './ui/dialog';
+import { Input } from './ui/input';
 
 const badge = 'inline-flex flex-wrap items-center gap-x-1.5 rounded-full px-2 py-0.5 text-xs font-medium';
 
@@ -55,7 +57,20 @@ function IconAction({ label, onClick, className, children }: { label: string; on
 /** Every class at a glance: setup, scores and backup, with a click through to the right gradebook. */
 export function AllClassesOverview() {
   const { classes, backedUp, selectClass, setView, trashClass, archiveClass, unarchiveClass, restoreClassFromTrash, deleteClassPermanent, emptyTrash } = useStore();
+  const { duplicateClassSetup } = useStore();
   const [tab, setTab] = useState<Tab>('active');
+  const [copying, setCopying] = useState<ClassRecord | null>(null);
+  const [newSection, setNewSection] = useState('');
+  const closeCopy = () => {
+    setCopying(null);
+    setNewSection('');
+  };
+  /** Copies the setup into a new class; the store opens the new class on its Prelim gradebook. */
+  const copySetup = () => {
+    if (!copying || newSection.trim() === '') return;
+    duplicateClassSetup(copying.id, newSection);
+    closeCopy();
+  };
 
   const groups = useMemo(
     () => ({
@@ -243,9 +258,14 @@ export function AllClassesOverview() {
                       <td className="px-3 py-2">
                         <div className="flex items-center justify-end gap-0.5">
                           {tab === 'active' ? (
-                            <IconAction label="Archive class" onClick={() => archiveClass(c.id)}>
-                              <Archive className="size-4" />
-                            </IconAction>
+                            <>
+                              <IconAction label="Duplicate setup for a new section" onClick={() => setCopying(c)}>
+                                <Copy className="size-4" />
+                              </IconAction>
+                              <IconAction label="Archive class" onClick={() => archiveClass(c.id)}>
+                                <Archive className="size-4" />
+                              </IconAction>
+                            </>
                           ) : (
                             <IconAction label="Restore to active classes" onClick={() => unarchiveClass(c.id)}>
                               <ArchiveRestore className="size-4" />
@@ -264,6 +284,32 @@ export function AllClassesOverview() {
           )}
         </div>
       )}
+      <Dialog open={copying !== null} onOpenChange={(o) => !o && closeCopy()}>
+        {copying && (
+          <DialogContent title="Duplicate setup for a new section" description={`${classTitle(copying)}: copies the columns, categories and OBE tags of all 3 terms. The new class starts with no students or scores.`}>
+            <form
+              className="grid gap-3"
+              onSubmit={(e) => {
+                e.preventDefault();
+                copySetup();
+              }}
+            >
+              <label className="grid gap-1 text-sm font-medium text-slate-700">
+                New section
+                <Input autoFocus value={newSection} placeholder="e.g. 1-B" onChange={(e) => setNewSection(e.target.value)} />
+              </label>
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={closeCopy}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={newSection.trim() === ''}>
+                  <Copy /> Duplicate and open
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        )}
+      </Dialog>
     </div>
   );
 }

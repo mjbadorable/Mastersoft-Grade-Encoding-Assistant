@@ -19,7 +19,7 @@ import { Select } from './ui/input';
 import { WorkflowGuide } from './WorkflowGuide';
 
 export function TermGradebook({ record, term }: { record: ClassRecord; term: Term }) {
-  const { updateClassInfo, setCsMode, addStudent, setView, undo, redo, copyTermSetup } = useStore();
+  const { updateClassInfo, setCsMode, addStudent, setView, undo, redo, copyTermSetup, unarchiveClass } = useStore();
   const history = useHistoryLabels();
   const setup = record.terms[term];
   const [columnDialog, setColumnDialog] = useState<Column | 'new' | null>(null);
@@ -103,6 +103,14 @@ export function TermGradebook({ record, term }: { record: ClassRecord; term: Ter
 
   return (
     <>
+      {record.archived && (
+        <div role="status" className="flex flex-wrap items-center gap-3 border-b border-amber-200 bg-amber-50 px-4 py-1.5 text-sm text-amber-900">
+          <span>📦 This class is archived.</span>
+          <Button size="sm" variant="outline" className="h-7 border-amber-300 bg-white px-2 text-xs text-amber-900 hover:bg-amber-100" onClick={() => unarchiveClass(record.id)}>
+            Unarchive class
+          </Button>
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-4 py-2.5">
         <h2 className="mr-1 text-base font-semibold">
           {TERM_LABEL[term]} Gradebook <span className="text-sm font-normal text-slate-400">({termWeightLabel(term)} of FR)</span>
