@@ -7,7 +7,7 @@ import { duplicateStudentIds, finalOutcome, formatPoint, parseScore, termOutcome
 import { classOverview, termProgress } from '../../src/app/progress';
 import { mergeMastersoftRows, planExport } from '../../src/app/mastersoftFile';
 import type { ClassRecord, MastersoftRow, Student, TermSetup } from '../../src/app/types';
-import { computeTerm, finalRating, pointGrade, rules, scale, solveReverse, transmute, type Term } from '../../src/engine';
+import { computeTerm, finalRating, minFinalNeeded, pointGrade, rules, scale, solveReverse, transmute, type Term } from '../../src/engine';
 
 const termSetup = (p: string, max = 100): TermSetup => ({
   csMode: 'RAW_SUM',
@@ -102,6 +102,31 @@ describe('REQ-05: pass/fail from the final grade only', () => {
   it('TC-008: exactly 75 passes with 3.0', () => {
     expect(finalRating(75, 75, 75)).toMatchObject({ grade: 75, point: { point: 3.0 } });
     expect(pointGrade(75, 'term').point).toBe(3.0);
+  });
+
+  it('TC-009: 74.50–74.99 rounds half-up to 75 and passes (3.0); below 74.50 rounds down and fails (5.0)', () => {
+    // Prelim 74, Midterm 75, Final 75: 0.2·74 + 0.3·75 + 0.5·75 = 74.8 → 75 → 3.0
+    expect(finalRating(74, 75, 75)).toEqual({ raw: 74.8, grade: 75, point: { point: 3.0, verified: true } });
+    // The lower edge, exactly 74.50, and the weighted sums just under 75.
+    expect(finalRating(74, 74, 75)).toMatchObject({ raw: 74.5, grade: 75, point: { point: 3.0 } });
+    expect(finalRating(72, 75, 76)).toMatchObject({ raw: 74.9, grade: 75, point: { point: 3.0 } });
+    // Strictly below 74.50 (grades are whole numbers, so the closest sums are 74.4 and 74.3): rounds down and fails.
+    expect(finalRating(72, 75, 75)).toMatchObject({ raw: 74.4, grade: 74, point: { point: 5.0 } });
+    expect(finalRating(74, 75, 74)).toMatchObject({ raw: 74.3, grade: 74, point: { point: 5.0 } });
+  });
+
+  it('TC-009: minFinalNeeded uses the same 74.50 cutoff', () => {
+    expect(minFinalNeeded(74, 74)).toEqual({ kind: 'value', grade: 75 }); // 74.5 exactly
+    expect(minFinalNeeded(72, 75)).toEqual({ kind: 'value', grade: 76 }); // 75 would give 74.4
+    for (let p = 70; p <= 80; p++) {
+      for (let m = 70; m <= 80; m++) {
+        const need = minFinalNeeded(p, m);
+        if (need.kind !== 'value') continue;
+        expect(finalRating(p, m, need.grade).raw).toBeGreaterThanOrEqual(74.5);
+        expect(finalRating(p, m, need.grade).grade).toBe(75);
+        expect(finalRating(p, m, need.grade - 1).grade).toBeLessThan(75);
+      }
+    }
   });
 
   it('TC-010: every passing FR point grade (1.0 to 3.0) comes from a grade of 75 or more', () => {

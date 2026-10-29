@@ -1,6 +1,6 @@
-import { FileSpreadsheet, FileUp, Plus, Search, Trash2, UserPlus } from 'lucide-react';
+import { ArrowDownWideNarrow, ArrowUpNarrowWide, Eraser, FileSpreadsheet, FileUp, MoreVertical, PaintBucket, Pencil, Plus, Search, Trash2, UserPlus, X } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
-import { displayOrder, type SortOrder } from '../app/displayOrder';
+import { displayOrder, type ScoreSort, type SortOrder } from '../app/displayOrder';
 import { assessmentTotals, csColumns, duplicateStudentIds, formatPoint, parseScore, pasteExtent, sameIdAs, termColumnStats, termOutcome, weColumns, type TermOutcome } from '../app/gradebook';
 import { STATUS_NAME, STATUSES } from '../app/labels';
 import { columnTags } from '../app/obe';
@@ -73,14 +73,13 @@ export function focusGridCell(row: number, col: number | 'status', flash = false
 }
 
 export function GradebookGrid({ record, term, onEditColumn, onAddColumn, onAddStudent, onImportMastersoft, onImportExcel }: Props) {
-  const { setStudentField, setScore, setStatus, deleteStudent, addStudent, pasteBlock, openDrawer } = useStore();
+  const { setStudentField, setScore, setStatus, deleteStudent, addStudent, pasteBlock, openDrawer, fillColumnScores, clearColumnScores } = useStore();
   const setup = record.terms[term];
   const cs = csColumns(setup);
   const we = weColumns(setup);
   const scoreColumns = [...cs, ...we];
   const totals = assessmentTotals(setup);
   const weighted = setup.csMode === 'WEIGHTED_CATEGORIES';
-  const categoryName = (c: Column) => setup.categories.find((cat) => cat.id === c.categoryId)?.name;
   const tableRef = useRef<HTMLTableElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [gridWidth, setGridWidth] = useState(Number.POSITIVE_INFINITY);
@@ -102,7 +101,10 @@ export function GradebookGrid({ record, term, onEditColumn, onAddColumn, onAddSt
   const [query, setQuery] = useState('');
   const [sortOrder, setSortOrder] = useState<SortOrder>('mastersoft');
   const searchRef = useRef<HTMLInputElement>(null);
-  const displayRows = useMemo(() => displayOrder(record.students, query, sortOrder), [record.students, query, sortOrder]);
+  const [scoreSort, setScoreSort] = useState<ScoreSort | undefined>();
+  // A sort on a column that was deleted, or that belongs to another term, no longer applies.
+  const activeScoreSort = scoreSort && scoreColumns.some((c) => c.id === scoreSort.columnId) ? scoreSort : undefined;
+  const displayRows = useMemo(() => displayOrder(record.students, query, sortOrder, activeScoreSort), [record.students, query, sortOrder, activeScoreSort]);
   useEffect(() => {
     const clear = () => setQuery('');
     window.addEventListener(CLEAR_FILTER, clear);
@@ -223,6 +225,7 @@ export function GradebookGrid({ record, term, onEditColumn, onAddColumn, onAddSt
   const foot = 'sticky bottom-0 border-t-2 border-t-slate-300 border-b border-r border-b-slate-200 border-r-slate-200 bg-slate-100 text-xs font-semibold text-slate-700';
   // Row highlight on hover and while a cell in the row has focus.
   const rowBg = 'bg-white group-hover:bg-slate-50 group-focus-within:bg-sky-50';
+  const outBg = 'bg-[#fdf6f6] group-focus-within:bg-sky-50';
   const columnCount = 4 + Math.max(cs.length, 1) + Math.max(we.length, 1) + 1 + outputs.length;
   const addPlaceholder = (component: Component) => (
     <th className={cn(th, 'min-w-32 p-1 font-normal', component === 'CS' ? 'bg-sky-50/60' : 'bg-violet-50/60')}>
@@ -316,18 +319,42 @@ export function GradebookGrid({ record, term, onEditColumn, onAddColumn, onAddSt
           </tr>
           <tr>
             {cs.length === 0 && addPlaceholder('CS')}
-            {scoreColumns.map((c) => (
-              <th key={c.id} className={cn(th, 'min-w-24 w-28 p-0', c.component === 'CS' ? 'bg-sky-50/60' : 'bg-violet-50/60')}>
-                <button onClick={() => onEditColumn(c)} className="w-full px-2 py-1.5 text-left hover:bg-white/70" title="Edit column">
-                  <div className="truncate">{c.label}</div>
-                  <div className="tabular text-[11px] font-normal text-slate-500">
-                    / {c.maxScore}
-                    {weighted && c.component === 'CS' && <span className="ml-1">· {categoryName(c) ?? 'no category'}</span>}
+            {scoreColumns.map((c) => {
+              const category = weighted && c.component === 'CS' ? setup.categories.find((cat) => cat.id === c.categoryId) : undefined;
+              const sortedDir = activeScoreSort?.columnId === c.id ? activeScoreSort.dir : undefined;
+              return (
+                <th key={c.id} className={cn(th, 'min-w-24 w-28 p-0', c.component === 'CS' ? 'bg-sky-50/60' : 'bg-violet-50/60')}>
+                  <div className="flex items-start">
+                    <button onClick={() => onEditColumn(c)} className="min-w-0 flex-1 px-2 py-1.5 text-left hover:bg-white/70" title="Edit column">
+                      <div className="truncate">
+                        {c.label}
+                        {sortedDir === 'asc' && <ArrowUpNarrowWide className="ml-1 inline size-3 text-brand" aria-label="Sorted low to high" />}
+                        {sortedDir === 'desc' && <ArrowDownWideNarrow className="ml-1 inline size-3 text-brand" aria-label="Sorted high to low" />}
+                      </div>
+                      <div className="tabular text-[11px] font-normal text-slate-500">/ {c.maxScore}</div>
+                      {weighted && c.component === 'CS' && (
+                        <div
+                          className={cn('truncate text-[11px] font-medium', category ? 'text-sky-800' : 'text-amber-700')}
+                          title={category ? `${category.name} counts for ${category.weightPct}% of Class Standing` : 'Assign this column to a category'}
+                        >
+                          {category ? `${category.name} · ${category.weightPct}%` : 'no category'}
+                        </div>
+                      )}
+                      <ObeTags record={record} column={c} />
+                    </button>
+                    <ColumnMenu
+                      column={c}
+                      sortedDir={sortedDir}
+                      hasScores={record.students.some((s) => (s.scores[c.id] ?? '').trim() !== '')}
+                      onFill={(value, overwrite) => fillColumnScores(term, c.id, value, overwrite ? 'all' : 'blanks-only')}
+                      onClear={() => clearColumnScores(term, c.id)}
+                      onSort={(dir) => setScoreSort(dir ? { columnId: c.id, dir } : undefined)}
+                      onEdit={() => onEditColumn(c)}
+                    />
                   </div>
-                  <ObeTags record={record} column={c} />
-                </button>
-              </th>
-            ))}
+                </th>
+              );
+            })}
             {we.length === 0 && addPlaceholder('WE')}
           </tr>
         </thead>
@@ -339,7 +366,7 @@ export function GradebookGrid({ record, term, onEditColumn, onAddColumn, onAddSt
             const carried = outcome.kind === 'status' && outcome.carried;
             return (
               <tr key={student.id} className="group">
-                <td style={leftStyle(0)} className={cn(td, 'z-10', rowBg, 'text-center text-xs text-slate-500')}>
+                <td style={leftStyle(0)} className={cn(td, 'z-10', rowBg, 'text-center text-xs text-slate-500 group-focus-within:font-semibold group-focus-within:text-brand group-focus-within:shadow-[inset_3px_0_0_0_var(--color-brand)]')}>
                   <span className="group-hover:hidden">
                     {fromMastersoft && !student.mastersoft ? (
                       <span className="font-semibold text-amber-700" title="Not in the Mastersoft list: left out of the Mastersoft export">
@@ -406,7 +433,7 @@ export function GradebookGrid({ record, term, onEditColumn, onAddColumn, onAddSt
                   const text = student.scores[c.id] ?? '';
                   const parsed = parseScore(text, c.maxScore);
                   return (
-                    <td key={c.id} className={cn(td, 'group-hover:bg-slate-50 group-focus-within:bg-sky-50/60', outcome.kind === 'status' && 'bg-slate-50')}>
+                    <td key={c.id} className={cn(td, 'group-hover:bg-slate-50 group-focus-within:bg-sky-50/50', outcome.kind === 'status' && 'bg-slate-50')}>
                       {cellInput(student, row, i + 2, text, (v) => setScore(student.id, c.id, v), {
                         numeric: true,
                         label: c.label,
@@ -418,7 +445,7 @@ export function GradebookGrid({ record, term, onEditColumn, onAddColumn, onAddSt
                 {we.length === 0 && <td className={td} />}
                 <td className="border-b border-r border-slate-200 bg-slate-50/20" />
                 {outputs.map((o, i) => (
-                  <td key={o.key} style={outStyle(i)} className={cn(td, 'z-10 bg-[#fdf6f6]', i === 0 && 'border-l-2 border-l-brand/40')}>
+                  <td key={o.key} style={outStyle(i)} className={cn(td, 'z-10', outBg, i === 0 && 'border-l-2 border-l-brand/40')}>
                     <button
                       onClick={() => {
                         const col = outcome.kind === 'incomplete' || outcome.kind === 'invalid' ? firstProblemCol(student) : undefined;
@@ -558,6 +585,183 @@ export function GradebookGrid({ record, term, onEditColumn, onAddColumn, onAddSt
         </div>
       )}
     </div>
+  );
+}
+
+/** Three-dots menu on a score column header: fill, clear, sort and edit without opening the setup drawer. */
+function ColumnMenu({
+  column,
+  sortedDir,
+  hasScores,
+  onFill,
+  onClear,
+  onSort,
+  onEdit,
+}: {
+  column: Column;
+  sortedDir: ScoreSort['dir'] | undefined;
+  hasScores: boolean;
+  onFill: (value: string, overwrite: boolean) => void;
+  onClear: () => void;
+  onSort: (dir: ScoreSort['dir'] | undefined) => void;
+  onEdit: () => void;
+}) {
+  const [anchor, setAnchor] = useState<{ top: number; left: number } | null>(null);
+  const [filling, setFilling] = useState(false);
+  const [value, setValue] = useState('');
+  const [overwrite, setOverwrite] = useState(false);
+  const open = anchor !== null;
+  const close = () => {
+    setAnchor(null);
+    setFilling(false);
+    setValue('');
+    setOverwrite(false);
+  };
+  // The menu is fixed-position, so it closes when the grid scrolls or the window resizes.
+  useEffect(() => {
+    if (!open) return;
+    const dismiss = () => {
+      setAnchor(null);
+      setFilling(false);
+      setValue('');
+      setOverwrite(false);
+    };
+    const onKey = (e: globalThis.KeyboardEvent) => e.key === 'Escape' && dismiss();
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('resize', dismiss);
+    window.addEventListener('scroll', dismiss, true);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('resize', dismiss);
+      window.removeEventListener('scroll', dismiss, true);
+    };
+  }, [open]);
+
+  const parsed = parseScore(value, column.maxScore);
+  const item = 'flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-transparent';
+  const fill = () => {
+    if (parsed.kind !== 'ok') return;
+    onFill(value, overwrite);
+    close();
+  };
+  const sortItem = (dir: ScoreSort['dir'], label: string, Icon: typeof ArrowUpNarrowWide) => (
+    <button
+      role="menuitem"
+      className={cn(item, sortedDir === dir && 'font-semibold text-brand')}
+      onClick={() => {
+        onSort(sortedDir === dir ? undefined : dir);
+        close();
+      }}
+    >
+      <Icon className="size-3.5" /> {label}
+    </button>
+  );
+  return (
+    <>
+      <button
+        type="button"
+        onClick={(e) => {
+          const r = e.currentTarget.getBoundingClientRect();
+          setAnchor(open ? null : { top: r.bottom + 2, left: Math.max(8, Math.min(r.right - 208, window.innerWidth - 216)) });
+        }}
+        className="mr-0.5 mt-1 shrink-0 rounded p-1 text-slate-400 hover:bg-white/70 hover:text-slate-700"
+        aria-label={`Column actions for ${column.label}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title="Column actions"
+      >
+        <MoreVertical className="size-3.5" />
+      </button>
+      {anchor && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={close} />
+          <div role="menu" style={{ top: anchor.top, left: anchor.left }} className="fixed z-50 w-52 rounded-md border border-slate-200 bg-white p-1 text-left font-normal shadow-lg">
+            {filling ? (
+              <div className="grid gap-2 p-2">
+                <label className="grid gap-1 text-xs text-slate-600">
+                  Fill value (0–{column.maxScore})
+                  <Input
+                    autoFocus
+                    value={value}
+                    onChange={(e) => setValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        fill();
+                      }
+                    }}
+                    inputMode="decimal"
+                    placeholder={String(column.maxScore)}
+                    aria-invalid={value.trim() !== '' && parsed.kind !== 'ok'}
+                    className="tabular h-8 text-xs aria-invalid:border-red-500"
+                  />
+                </label>
+                {value.trim() !== '' && parsed.kind === 'invalid' && <p className="text-[11px] text-red-600">{parsed.message}.</p>}
+                <label className="flex items-center gap-1.5 text-[11px] text-slate-600">
+                  <input type="checkbox" checked={overwrite} onChange={(e) => setOverwrite(e.target.checked)} className="accent-brand" />
+                  Also replace typed scores
+                </label>
+                <p className="text-[11px] text-slate-500">Students with a status this term are skipped. Undo restores old scores.</p>
+                <div className="flex justify-end gap-1">
+                  <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={close}>
+                    Cancel
+                  </Button>
+                  <Button size="sm" className="h-7 px-2 text-xs" disabled={parsed.kind !== 'ok'} onClick={fill}>
+                    Fill
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <button role="menuitem" className={item} onClick={() => setFilling(true)}>
+                  <PaintBucket className="size-3.5" /> Fill blank scores...
+                </button>
+                <button
+                  role="menuitem"
+                  className={cn(item, 'text-red-600 hover:bg-red-50')}
+                  disabled={!hasScores}
+                  onClick={() => {
+                    close();
+                    void (async () => {
+                      const ok = await confirmAction({ title: 'Clear all scores?', message: `Every score typed in "${column.label}" will be removed. You can undo this.`, confirmLabel: 'Clear scores' });
+                      if (ok) onClear();
+                    })();
+                  }}
+                >
+                  <Eraser className="size-3.5" /> Clear all scores
+                </button>
+                <div className="my-1 border-t border-slate-100" />
+                {sortItem('asc', 'Sort by score, low to high', ArrowUpNarrowWide)}
+                {sortItem('desc', 'Sort by score, high to low', ArrowDownWideNarrow)}
+                {sortedDir && (
+                  <button
+                    role="menuitem"
+                    className={item}
+                    onClick={() => {
+                      onSort(undefined);
+                      close();
+                    }}
+                  >
+                    <X className="size-3.5" /> Clear score sort
+                  </button>
+                )}
+                <div className="my-1 border-t border-slate-100" />
+                <button
+                  role="menuitem"
+                  className={item}
+                  onClick={() => {
+                    close();
+                    onEdit();
+                  }}
+                >
+                  <Pencil className="size-3.5" /> Edit column setup
+                </button>
+              </>
+            )}
+          </div>
+        </>
+      )}
+    </>
   );
 }
 

@@ -2,14 +2,14 @@
 
 Basis: **Grade Encoding System – Requirements and Test Cases** (USA, built from the AY 2024-2025 to 2026-2027 Mastersoft issues): 25 requirements, 37 test cases. The filled-in workbook is `docs/test-results/Grade_Encoding_Requirements_and_Test_Cases - Results 2026-10-18.xlsx`.
 
-How it was tested: 18 automated checks in [tests/requirements/usa-test-cases.test.ts](../tests/requirements/usa-test-cases.test.ts) and 4 in [tests/app/saveQueue.test.ts](../tests/app/saveQueue.test.ts) (made-up students), plus browser tests for saving, two open tabs and duplicate IDs, and a code review for save errors.
+How it was tested: 20 automated checks in [tests/requirements/usa-test-cases.test.ts](../tests/requirements/usa-test-cases.test.ts) and 4 in [tests/app/saveQueue.test.ts](../tests/app/saveQueue.test.ts) (made-up students), plus browser tests for saving, two open tabs and duplicate IDs, and a code review for save errors.
 
 ## Results
 
 | | Count | Test cases |
 |---|---|---|
-| **Pass** | 24 | TC-001, 002, 004, 005, 006, 007, 008, 010, 012, 013, 016, 017, 018, 019, 020, 021, 026, 027, 028, 030, 032, 033, 034, 035 |
-| **Fail** | 4 | TC-009, 014, 015, 029 |
+| **Pass** | 25 | TC-001, 002, 004, 005, 006, 007, 008, 009, 010, 012, 013, 016, 017, 018, 019, 020, 021, 026, 027, 028, 030, 032, 033, 034, 035 |
+| **Fail** | 3 | TC-014, 015, 029 |
 | **Not applicable** (marked Blocked) | 9 | TC-003, 011, 022, 023, 024, 025, 031, 036, 037 |
 
 The "not applicable" cases test Mastersoft's own workflow: draft/submit/approve/release states, stored Final Ratings, subject activation, graduate transmutation schemes. This app is a companion calculator; those steps stay in Mastersoft.
@@ -23,6 +23,7 @@ First run: 19 pass, 9 fail. TC-020, 026, 027 and 028 were then fixed and reteste
 - **One computation everywhere** (REQ-01, 03, 22): every grade on every screen and in the Encoding Guide comes from the same engine and the same half-up rounding.
 - **Transmutation from 0 to the maximum** (REQ-04): 0/60, 1/60, 5/60 and 60/60 all compute, with no errors or blanks.
 - **75 always passes** (REQ-05): 75 gives 3.0 Passed, never 5.0.
+- **Just below 75** (REQ-05, TC-009): under standard half-up rounding, scores in the 74.50%–74.99% range round up to whole number 75 and yield a passing point grade of 3.00. Anything strictly below 74.50 rounds down to 74 and gets 5.0 (Failed). `minFinalNeeded` uses the same 74.50 cutoff. Confirmed institutional rule; covered by two automated checks in `tests/requirements/usa-test-cases.test.ts`.
 - **Blank vs 0** (REQ-07): blank is "not encoded" and not computed; 0 is computed.
 - **Late-added students and missing grades** (REQ-10, 11): new students appear everywhere, and the Mastersoft export is blocked with a list of students who are missing scores.
 - **Point grade format** (REQ-23): always one fixed decimal (3.0, 1.8).
@@ -43,6 +44,5 @@ Highest risk first.
 
 | # | Test case | Finding | Suggested fix |
 |---|---|---|---|
-| 1 | **TC-009** just below 75 (High, decision) | 74.5–74.9 rounds half-up to 75 and passes (D2). The test expects anything below 75.00 to fail. | Confirm Mastersoft's rule at 74.5–74.9 before changing anything. |
-| 2 | **TC-014 / TC-015** invalid entries (Medium, decision) | Out-of-range, negative and text entries are highlighted with a message and never computed or exported, but they stay in the cell and are saved. The test expects them to be rejected. | Either reject them on entry (test wording), or keep the current highlighting. |
-| 3 | **TC-029** history (Medium) | No change history or undo; only a manual backup can restore earlier values. | A per-class change history with "restore this value". |
+| 1 | **TC-014 / TC-015** invalid entries (Medium, decision) | Out-of-range, negative and text entries are highlighted with a message and never computed or exported, but they stay in the cell and are saved. The test expects them to be rejected. | Either reject them on entry (test wording), or keep the current highlighting. |
+| 2 | **TC-029** history (Medium) | No change history or undo; only a manual backup can restore earlier values. | A per-class change history with "restore this value". |

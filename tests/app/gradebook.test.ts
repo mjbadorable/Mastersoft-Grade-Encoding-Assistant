@@ -280,6 +280,12 @@ describe('displayOrder', () => {
     expect(displayOrder(list, '', 'id-asc')).toEqual([1, 3, 0, 2]);
   });
 
+  it('sorts by a score column, low to high or high to low, with blank and non-numeric scores last', () => {
+    const scored = ['8', '', '10', 'abc', '2'].map((v, i): Student => ({ ...named(`S${i}`, `S${i}`), scores: v ? { q: v } : {} }));
+    expect(displayOrder(scored, '', 'mastersoft', { columnId: 'q', dir: 'asc' })).toEqual([4, 0, 2, 1, 3]);
+    expect(displayOrder(scored, '', 'mastersoft', { columnId: 'q', dir: 'desc' })).toEqual([2, 0, 4, 1, 3]);
+  });
+
   it('filters by ID or name, ignoring case and spaces around the query, in the chosen order', () => {
     expect(displayOrder(list, ' CRUZ ', 'mastersoft')).toEqual([0]);
     expect(displayOrder(list, '2024-', 'name-asc')).toEqual([1, 3, 0]);
