@@ -8,8 +8,8 @@ How it was tested: 20 automated checks in [tests/requirements/usa-test-cases.tes
 
 | | Count | Test cases |
 |---|---|---|
-| **Pass** | 25 | TC-001, 002, 004, 005, 006, 007, 008, 009, 010, 012, 013, 016, 017, 018, 019, 020, 021, 026, 027, 028, 030, 032, 033, 034, 035 |
-| **Fail** | 3 | TC-014, 015, 029 |
+| **Pass** | 26 | TC-001, 002, 004, 005, 006, 007, 008, 009, 010, 012, 013, 016, 017, 018, 019, 020, 021, 026, 027, 028, 029, 030, 032, 033, 034, 035 |
+| **Fail** | 2 | TC-014, 015 |
 | **Not applicable** (marked Blocked) | 9 | TC-003, 011, 022, 023, 024, 025, 031, 036, 037 |
 
 The "not applicable" cases test Mastersoft's own workflow: draft/submit/approve/release states, stored Final Ratings, subject activation, graduate transmutation schemes. This app is a companion calculator; those steps stay in Mastersoft.
@@ -37,6 +37,7 @@ First run: 19 pass, 9 fail. TC-020, 026, 027 and 028 were then fixed and reteste
 | **TC-027** failed save | The header shows "Not saved · Retry" and a red banner explains the changes are still on screen; "Try again" saves them. The tab warns before closing with unsaved changes. Retested by forcing database writes to fail. |
 | **TC-020** duplicate IDs | Duplicate Student IDs (ignoring case and spaces) turn red with who else uses them, are counted in the status bar, reachable with "Next blank or error", noted in the Encoding Guide, and block the Mastersoft export. |
 | **TC-032** readiness | "All classes overview" at the top of the Gradebook menu lists every class with its student count (and a red badge for duplicate IDs), the state of Prelim, Midterm and Final ("Needs setup", "Ready (n)", or graded / blank / to-fix counts) and whether the class is backed up. Each cell opens that class and term. Automated check in `tests/requirements/usa-test-cases.test.ts`. |
+| **TC-029** change history / undo | Per-class 50-step in-memory ring buffer (`src/app/history.ts`) captures edits with descriptive labels (e.g. "Edit score", "Fill blanks", "Copy setup from Prelim"), keyboard shortcuts (`Ctrl+Z`, `Ctrl+Y`), toolbar undo/redo buttons with tooltips, and syncs across IndexedDB reloads. Retested by 23 automated tests in `tests/app/history.test.ts`. |
 
 ## Remaining failures and what they need
 
@@ -45,4 +46,3 @@ Highest risk first.
 | # | Test case | Finding | Suggested fix |
 |---|---|---|---|
 | 1 | **TC-014 / TC-015** invalid entries (Medium, decision) | Out-of-range, negative and text entries are highlighted with a message and never computed or exported, but they stay in the cell and are saved. The test expects them to be rejected. | Either reject them on entry (test wording), or keep the current highlighting. |
-| 2 | **TC-029** history (Medium) | No change history or undo; only a manual backup can restore earlier values. | A per-class change history with "restore this value". |
