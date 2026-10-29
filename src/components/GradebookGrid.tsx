@@ -1,4 +1,4 @@
-import { ArrowDownWideNarrow, ArrowUpNarrowWide, Eraser, FileSpreadsheet, FileUp, MoreVertical, PaintBucket, Pencil, Plus, Search, Trash2, UserPlus, X } from 'lucide-react';
+import { ArrowDownWideNarrow, ArrowUpNarrowWide, ChevronLeft, ChevronRight, Eraser, FileSpreadsheet, FileUp, MoreVertical, PaintBucket, Pencil, Plus, Search, Trash2, UserPlus, X } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
 import { displayOrder, type ScoreSort, type SortOrder } from '../app/displayOrder';
 import { assessmentTotals, csColumns, duplicateStudentIds, formatPoint, parseScore, pasteExtent, sameIdAs, termColumnStats, termOutcome, weColumns, type TermOutcome } from '../app/gradebook';
@@ -13,19 +13,71 @@ import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Input, Select } from './ui/input';
 
-// Pinned left columns: #, Student ID, Student Name, Status.
-const LEFT = [
-  { w: 40, left: 0 },
-  { w: 104, left: 40 },
-  { w: 184, left: 144 },
-  { w: 76, left: 328 },
-];
+// Pinned left columns: #, Student ID, Student Name, Status. Only the name is resizable.
+const NAME_W = 184;
+const LEFT_BASE = [40, 104, NAME_W, 76];
 const OUT_W = 88;
-/** Score columns always keep at least this much visible width between the pinned columns. */
+const SCORE_W = 112;
+const MIN_COL_W = 64;
+/** Score columns always keep at least this much visible width next to the pinned columns. */
 const MIN_SCROLL_AREA = 260;
-const LEFT_W = LEFT.reduce((sum, c) => sum + c.w, 0);
-/** In narrow grids only # and Student Name stay pinned (left offsets). */
-const NARROW_LEFT: Record<number, number> = { 0: 0, 2: LEFT[0]!.w };
+/** Fold buttons live in the group headers; the summary column replaces the folded columns. */
+type Folded = Record<Component, boolean>;
+
+type Widths = Record<string, number>;
+const widthsKey = (classId: string) => `gradebook:widths:${classId}`;
+const loadWidths = (classId: string): Widths => {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(widthsKey(classId)) ?? '{}');
+    if (!parsed || typeof parsed !== 'object') return {};
+    return Object.fromEntries(Object.entries(parsed).filter(([, v]) => typeof v === 'number' && Number.isFinite(v) && v >= MIN_COL_W));
+  } catch {
+    return {};
+  }
+};
+const saveWidths = (classId: string, widths: Widths) => {
+  try {
+    localStorage.setItem(widthsKey(classId), JSON.stringify(widths));
+  } catch {
+    // Storage may be blocked: the widths then last only for this session.
+  }
+};
+
+/** Drag handle on the right edge of a header cell. Double-click resets to the default width. */
+function ColumnResizer({ width, onChange, label }: { width: number; onChange: (w: number | undefined) => void; label: string }) {
+  return (
+    <span
+      role="separator"
+      aria-orientation="vertical"
+      aria-label={`Resize ${label} column`}
+      title="Drag to resize, double-click to reset"
+      className="absolute right-0 top-0 z-10 h-full w-1.5 cursor-col-resize touch-none select-none hover:bg-brand/40"
+      onClick={(e) => e.stopPropagation()}
+      onDoubleClick={(e) => {
+        e.stopPropagation();
+        onChange(undefined);
+      }}
+      onPointerDown={(e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const target = e.currentTarget;
+        target.setPointerCapture(e.pointerId);
+        const startX = e.clientX;
+        const startW = width;
+        const move = (ev: PointerEvent) => onChange(Math.max(MIN_COL_W, Math.round(startW + ev.clientX - startX)));
+        const up = () => {
+          target.removeEventListener('pointermove', move);
+          target.removeEventListener('pointerup', up);
+          target.removeEventListener('pointercancel', up);
+        };
+        target.addEventListener('pointermove', move);
+        target.addEventListener('pointerup', up);
+        target.addEventListener('pointercancel', up);
+      }}
+    />
+  );
+}
 
 interface Props {
   record: ClassRecord;
@@ -43,6 +95,8 @@ let lastCell: { row: number; col: number } | undefined;
 
 /** Asks the grid to drop its student search (a jump to a hidden row needs the row back). */
 const CLEAR_FILTER = 'gradebook:clear-filter';
+/** Asks the grid to unfold CS and WE (a jump to a score inside a folded group needs it back). */
+const EXPAND_GROUPS = 'gradebook:expand-groups';
 
 /** The grid cell that last had focus (buttons outside the grid take focus away from it). */
 export const lastFocusedCell = () => lastCell;
@@ -56,6 +110,12 @@ export function focusGridCell(row: number, col: number | 'status', flash = false
   // The student search may be hiding this row: clear it, then try again once the grid has redrawn.
   if (!el && !retried && document.querySelector('[data-filtered]')) {
     window.dispatchEvent(new Event(CLEAR_FILTER));
+    requestAnimationFrame(() => requestAnimationFrame(() => focusGridCell(row, col, flash, true)));
+    return;
+  }
+  // The score may sit in a folded group: unfold, then try again once the grid has redrawn.
+  if (!el && !retried && document.querySelector('[data-folded]')) {
+    window.dispatchEvent(new Event(EXPAND_GROUPS));
     requestAnimationFrame(() => requestAnimationFrame(() => focusGridCell(row, col, flash, true)));
     return;
   }
@@ -92,8 +152,42 @@ export function GradebookGrid({ record, term, onEditColumn, onAddColumn, onAddSt
     return () => observer.disconnect();
   }, []);
 
+  // Custom column widths, remembered per class. The state remembers which class it was loaded for.
+  const [widthState, setWidthState] = useState(() => ({ id: record.id, map: loadWidths(record.id) }));
+  const widths = widthState.id === record.id ? widthState.map : loadWidths(record.id);
+  const widthOf = (key: string, fallback: number) => widths[key] ?? fallback;
+  const setWidth = (key: string, width: number | undefined) => {
+    const { [key]: _old, ...rest } = widths;
+    const map = width === undefined ? rest : { ...rest, [key]: width };
+    setWidthState({ id: record.id, map });
+    saveWidths(record.id, map);
+  };
+  const nameW = widthOf('name', NAME_W);
+  const leftW = LEFT_BASE.map((w, i) => (i === 2 ? nameW : w));
+  const leftOffsets = leftW.map((_, i) => leftW.slice(0, i).reduce((sum, w) => sum + w, 0));
+  const LEFT_W = leftW.reduce((sum, w) => sum + w, 0);
+
+  // Folding CS or WE swaps its columns for one total column. Not saved: the grid opens expanded.
+  const [folded, setFolded] = useState<Folded>({ CS: false, WE: false });
+  useEffect(() => {
+    const expand = () => setFolded({ CS: false, WE: false });
+    window.addEventListener(EXPAND_GROUPS, expand);
+    return () => window.removeEventListener(EXPAND_GROUPS, expand);
+  }, []);
+  const csFolded = folded.CS && cs.length > 0;
+  const weFolded = folded.WE && we.length > 0;
+  const isFolded = (c: Column) => (c.component === 'CS' ? csFolded : weFolded);
+
   const stats = useMemo(() => termColumnStats(record, term), [record, term]);
   const outcomes = useMemo(() => record.students.map((s) => termOutcome(record, s, term)), [record, term]);
+  /** Class average of each component's total, for the footer of a folded group. */
+  const groupAverage = useMemo(() => {
+    const mean = (pick: 'cs' | 'we') => {
+      const raws = outcomes.flatMap((o) => (o.kind === 'ok' ? [o.result[pick].raw] : []));
+      return raws.length ? Math.round((raws.reduce((a, b) => a + b, 0) / raws.length) * 100) / 100 : null;
+    };
+    return { CS: mean('cs'), WE: mean('we') };
+  }, [outcomes]);
   const fromMastersoft = record.students.some((s) => s.mastersoft);
   const duplicates = useMemo(() => duplicateStudentIds(record.students), [record.students]);
 
@@ -120,11 +214,18 @@ export function GradebookGrid({ record, term, onEditColumn, onAddColumn, onAddSt
   // Editable cells, in order: Student ID, Name, then each score column.
   const keys: CellKey[] = ['studentId', 'name', ...scoreColumns.map((c) => ({ columnId: c.id }))];
 
+  // Cell ids keep their full-grid index; folded score columns have no cells, so navigation skips them.
+  const editableCols = [0, 1, ...scoreColumns.flatMap((c, i) => (isFolded(c) ? [] : [i + 2]))];
+  const neighbour = (col: number, step: -1 | 1) => editableCols[editableCols.indexOf(col) + step];
+
   const focusCell = focusGridCell;
-  /** The first blank or invalid score in a row, as an editable-column index. */
+  /** The first blank or invalid score in a row (editable-column index). Scores inside a folded group come last. */
   const firstProblemCol = (student: Student) => {
-    const i = scoreColumns.findIndex((c) => parseScore(student.scores[c.id], c.maxScore).kind !== 'ok');
-    return i < 0 ? undefined : i + 2;
+    const bad = (c: Column) => parseScore(student.scores[c.id], c.maxScore).kind !== 'ok';
+    const i = scoreColumns.findIndex((c) => !isFolded(c) && bad(c));
+    if (i >= 0) return i + 2;
+    const hidden = scoreColumns.findIndex(bad);
+    return hidden < 0 ? undefined : hidden + 2;
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>, row: number, col: number) => {
@@ -147,10 +248,12 @@ export function GradebookGrid({ record, term, onEditColumn, onAddColumn, onAddSt
       if (previous !== undefined) focusCell(previous, col);
     } else if (e.key === 'ArrowLeft' && atStart) {
       e.preventDefault();
-      focusCell(row, col - 1);
+      const previous = neighbour(col, -1);
+      if (previous !== undefined) focusCell(row, previous);
     } else if (e.key === 'ArrowRight' && atEnd) {
       e.preventDefault();
-      focusCell(row, col + 1);
+      const next = neighbour(col, 1);
+      if (next !== undefined) focusCell(row, next);
     }
   };
 
@@ -160,8 +263,11 @@ export function GradebookGrid({ record, term, onEditColumn, onAddColumn, onAddSt
     if (!/[\t\n]/.test(text.replace(/\r?\n$/, ''))) return;
     e.preventDefault();
     const rows = text.replace(/\r?\n$/, '').split(/\r?\n/).map((line) => line.split('\t'));
-    pasteBlock(row, keys, col, rows, displayRows.slice(displayRows.indexOf(row)));
-    const { overflow, written } = pasteExtent(rows, keys.length, col);
+    // Paste only into the columns that are showing.
+    const shownKeys = editableCols.map((i) => keys[i]!);
+    const shownCol = editableCols.indexOf(col);
+    pasteBlock(row, shownKeys, shownCol, rows, displayRows.slice(displayRows.indexOf(row)));
+    const { overflow, written } = pasteExtent(rows, shownKeys.length, shownCol);
     setPasteNote(overflow > 0 ? { kind: 'overflow', written, overflow } : { kind: 'ok', rows: rows.length, columns: written });
   };
 
@@ -203,20 +309,17 @@ export function GradebookGrid({ record, term, onEditColumn, onAddColumn, onAddSt
     { key: 'tg', head: 'Term Grade', sub: '' },
     { key: 'pg', head: 'Point Grade', sub: '' },
   ];
-  // Pin only what fits, so pinned columns never cover the student names and scores.
-  const pinOutputs = gridWidth >= LEFT_W + outputs.length * OUT_W + MIN_SCROLL_AREA;
+  // Only the student columns are frozen, and only what fits, so they never cover the scores.
+  // The output columns flow after the scores like any spreadsheet column.
   const pinAllLeft = gridWidth >= LEFT_W + MIN_SCROLL_AREA;
-  const outStyle = (i: number): CSSProperties => ({
-    width: OUT_W,
-    minWidth: OUT_W,
-    ...(pinOutputs && { position: 'sticky', right: (outputs.length - 1 - i) * OUT_W }),
-  });
+  const sized = (w: number): CSSProperties => ({ width: w, minWidth: w, maxWidth: w });
+  const outStyle = (key: string): CSSProperties => sized(widthOf(`out:${key}`, OUT_W));
   const leftStyle = (i: number): CSSProperties => {
-    const left = pinAllLeft ? LEFT[i]!.left : NARROW_LEFT[i];
-    return { width: LEFT[i]!.w, minWidth: LEFT[i]!.w, ...(left !== undefined && { position: 'sticky', left }) };
+    const left = pinAllLeft ? leftOffsets[i] : i === 0 ? 0 : i === 2 ? leftW[0] : undefined;
+    return { ...sized(leftW[i]!), ...(left !== undefined && { position: 'sticky', left }) };
   };
-  /** The last pinned left column gets the divider line. */
-  const leftEdge = (i: number) => i === (pinAllLeft ? 3 : 2) && 'border-r-2 border-r-slate-300';
+  /** The last pinned left column gets the divider line and a soft shadow over the scrolling columns. */
+  const leftEdge = (i: number) => i === (pinAllLeft ? 3 : 2) && 'border-r-2 border-r-slate-300 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.12)]';
 
   const th = 'border-b border-r border-slate-200 bg-slate-100 px-2 py-1.5 text-left text-xs font-semibold text-slate-600';
   const td = 'border-b border-r border-slate-200 p-0';
@@ -225,10 +328,12 @@ export function GradebookGrid({ record, term, onEditColumn, onAddColumn, onAddSt
   const foot = 'sticky bottom-0 border-t-2 border-t-slate-300 border-b border-r border-b-slate-200 border-r-slate-200 bg-slate-100 text-xs font-semibold text-slate-700';
   // Row highlight on hover and while a cell in the row has focus.
   const rowBg = 'bg-white group-hover:bg-slate-50 group-focus-within:bg-sky-50';
-  const outBg = 'bg-[#fdf6f6] group-focus-within:bg-sky-50';
-  const columnCount = 4 + Math.max(cs.length, 1) + Math.max(we.length, 1) + 1 + outputs.length;
+  const outBg = 'bg-[#fff7f7] text-slate-800 group-hover:bg-[#fae8e8] group-focus-within:bg-sky-50';
+  const csSpan = csFolded ? 1 : Math.max(cs.length, 1);
+  const weSpan = weFolded ? 1 : Math.max(we.length, 1);
+  const columnCount = 4 + csSpan + weSpan + 1 + outputs.length;
   const addPlaceholder = (component: Component) => (
-    <th className={cn(th, 'min-w-32 p-1 font-normal', component === 'CS' ? 'bg-sky-50/60' : 'bg-violet-50/60')}>
+    <th className={cn(th, 'min-w-32 p-1 font-normal', component === 'CS' ? 'bg-sky-50' : 'bg-violet-50')}>
       <Button size="sm" variant="ghost" className="h-7 w-full px-2 text-xs text-slate-600" onClick={() => onAddColumn(component)}>
         <Plus /> Add {component} column
       </Button>
@@ -292,13 +397,14 @@ export function GradebookGrid({ record, term, onEditColumn, onAddColumn, onAddSt
             {['#', 'Student ID', 'Student Name', 'Status'].map((h, i) => (
               <th key={h} rowSpan={2} style={leftStyle(i)} className={cn(th, 'z-30 align-bottom', leftEdge(i))}>
                 {h}
+                {i === 2 && <ColumnResizer width={nameW} onChange={(w) => setWidth('name', w)} label="Student Name" />}
               </th>
             ))}
-            <th colSpan={Math.max(cs.length, 1)} className={cn(th, 'whitespace-nowrap bg-sky-50 text-center text-sky-900')}>
-              Class Standing{weighted && ' (weighted categories)'}
+            <th colSpan={csSpan} className={cn(th, 'whitespace-nowrap border-sky-300 bg-sky-100 text-center font-semibold text-sky-950')}>
+              <GroupFold label="Class Standing" suffix={weighted && !csFolded ? ' (weighted categories)' : ''} folded={csFolded} disabled={cs.length === 0} onToggle={() => setFolded((f) => ({ ...f, CS: !f.CS }))} />
             </th>
-            <th colSpan={Math.max(we.length, 1)} className={cn(th, 'whitespace-nowrap bg-violet-50 text-center text-violet-900')}>
-              Written Exam
+            <th colSpan={weSpan} className={cn(th, 'whitespace-nowrap border-violet-300 bg-violet-100 text-center font-semibold text-violet-950')}>
+              <GroupFold label="Written Exam" folded={weFolded} disabled={we.length === 0} onToggle={() => setFolded((f) => ({ ...f, WE: !f.WE }))} />
             </th>
             <th rowSpan={2} className={cn(th, 'w-10 text-center')}>
               <Button size="icon" variant="ghost" onClick={() => onAddColumn()} aria-label="Add column" title="Add column">
@@ -309,21 +415,23 @@ export function GradebookGrid({ record, term, onEditColumn, onAddColumn, onAddSt
               <th
                 key={o.key}
                 rowSpan={2}
-                style={outStyle(i)}
-                className={cn(th, 'z-30 bg-brand/10 align-bottom text-brand', i === 0 && 'border-l-2 border-l-brand/40')}
+                style={outStyle(o.key)}
+                className={cn(th, 'relative bg-[#fef2f2] align-bottom font-semibold text-brand', i === 0 && 'border-l-2 border-l-brand/50 shadow-[-2px_0_4px_-1px_rgba(239,68,68,0.1)]')}
               >
                 <div className="leading-tight">{o.head}</div>
                 {o.sub && <div className="tabular text-[11px] font-normal text-slate-500">{o.sub}</div>}
+                <ColumnResizer width={widthOf(`out:${o.key}`, OUT_W)} onChange={(w) => setWidth(`out:${o.key}`, w)} label={o.head} />
               </th>
             ))}
           </tr>
           <tr>
             {cs.length === 0 && addPlaceholder('CS')}
-            {scoreColumns.map((c) => {
+            {csFolded && <SummaryHead label="CS Total" total={totals.cs} className="bg-sky-50" />}
+            {scoreColumns.filter((c) => !isFolded(c)).map((c) => {
               const category = weighted && c.component === 'CS' ? setup.categories.find((cat) => cat.id === c.categoryId) : undefined;
               const sortedDir = activeScoreSort?.columnId === c.id ? activeScoreSort.dir : undefined;
               return (
-                <th key={c.id} className={cn(th, 'min-w-24 w-28 p-0', c.component === 'CS' ? 'bg-sky-50/60' : 'bg-violet-50/60')}>
+                <th key={c.id} style={sized(widthOf(c.id, SCORE_W))} className={cn(th, 'relative p-0', c.component === 'CS' ? 'bg-sky-50' : 'bg-violet-50')}>
                   <div className="flex items-start">
                     <button onClick={() => onEditColumn(c)} className="min-w-0 flex-1 px-2 py-1.5 text-left hover:bg-white/70" title="Edit column">
                       <div className="truncate">
@@ -352,9 +460,11 @@ export function GradebookGrid({ record, term, onEditColumn, onAddColumn, onAddSt
                       onEdit={() => onEditColumn(c)}
                     />
                   </div>
+                  <ColumnResizer width={widthOf(c.id, SCORE_W)} onChange={(w) => setWidth(c.id, w)} label={c.label} />
                 </th>
               );
             })}
+            {weFolded && <SummaryHead label="WE Total" total={totals.we} className="bg-violet-50" />}
             {we.length === 0 && addPlaceholder('WE')}
           </tr>
         </thead>
@@ -429,7 +539,9 @@ export function GradebookGrid({ record, term, onEditColumn, onAddColumn, onAddSt
                   </select>
                 </td>
                 {cs.length === 0 && <td className={td} />}
+                {csFolded && <SummaryCell outcome={outcome} pick="cs" />}
                 {scoreColumns.map((c, i) => {
+                  if (isFolded(c)) return null;
                   const text = student.scores[c.id] ?? '';
                   const parsed = parseScore(text, c.maxScore);
                   return (
@@ -442,10 +554,11 @@ export function GradebookGrid({ record, term, onEditColumn, onAddColumn, onAddSt
                     </td>
                   );
                 })}
+                {weFolded && <SummaryCell outcome={outcome} pick="we" />}
                 {we.length === 0 && <td className={td} />}
                 <td className="border-b border-r border-slate-200 bg-slate-50/20" />
                 {outputs.map((o, i) => (
-                  <td key={o.key} style={outStyle(i)} className={cn(td, 'z-10', outBg, i === 0 && 'border-l-2 border-l-brand/40')}>
+                  <td key={o.key} style={outStyle(o.key)} className={cn(td, outBg, i === 0 && 'border-l-2 border-l-brand/50')}>
                     <button
                       onClick={() => {
                         const col = outcome.kind === 'incomplete' || outcome.kind === 'invalid' ? firstProblemCol(student) : undefined;
@@ -513,7 +626,9 @@ export function GradebookGrid({ record, term, onEditColumn, onAddColumn, onAddSt
                 <span className="ml-1.5 font-normal text-slate-500">({stats.graded} graded)</span>
               </td>
               {cs.length === 0 && <td className={cn(foot, 'z-20')} />}
+              {csFolded && <SummaryFoot average={groupAverage.CS} total={totals.cs} className={cn(foot, 'z-20')} />}
               {scoreColumns.map((c) => {
+                if (isFolded(c)) return null;
                 const st = stats.columns[c.id];
                 return (
                   <td key={c.id} className={cn(foot, 'z-20 px-2 py-1 text-right')} title={st && st.count ? `${st.count} graded` : 'No scores yet'}>
@@ -528,10 +643,11 @@ export function GradebookGrid({ record, term, onEditColumn, onAddColumn, onAddSt
                   </td>
                 );
               })}
+              {weFolded && <SummaryFoot average={groupAverage.WE} total={totals.we} className={cn(foot, 'z-20')} />}
               {we.length === 0 && <td className={cn(foot, 'z-20')} />}
               <td className={cn(foot, 'z-20')} />
               {outputs.map((o, i) => (
-                <td key={o.key} style={outStyle(i)} className={cn(foot, 'z-30 px-2 py-1 text-right', i === 0 && 'border-l-2 border-l-brand/40')}>
+                <td key={o.key} style={outStyle(o.key)} className={cn(foot, 'z-20 bg-[#fff1f2] px-2 py-1 text-right', i === 0 && 'border-l-2 border-l-brand/50')}>
                   {o.key === 'tg' &&
                     (stats.meanTermGrade !== null ? (
                       <span className="tabular" title="Mean Term Grade of graded students">
@@ -585,6 +701,66 @@ export function GradebookGrid({ record, term, onEditColumn, onAddColumn, onAddSt
         </div>
       )}
     </div>
+  );
+}
+
+/** Group header text with a fold/unfold chevron. */
+function GroupFold({ label, suffix = '', folded, disabled, onToggle }: { label: string; suffix?: string; folded: boolean; disabled: boolean; onToggle: () => void }) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      {!disabled && (
+        <button
+          type="button"
+          onClick={onToggle}
+          className="rounded p-0.5 hover:bg-white/70"
+          aria-label={`${folded ? 'Expand' : 'Collapse'} ${label}`}
+          aria-expanded={!folded}
+          title={folded ? `Show the ${label} columns` : `Collapse ${label} into one total`}
+        >
+          {folded ? <ChevronRight className="size-3.5" /> : <ChevronLeft className="size-3.5" />}
+        </button>
+      )}
+      {label}
+      {suffix}
+    </span>
+  );
+}
+
+const summaryHead = 'border-b border-r border-slate-200 px-2 py-1.5 text-left text-xs font-semibold text-slate-600';
+
+/** Header of the single column that stands in for a folded group. */
+function SummaryHead({ label, total, className }: { label: string; total: number | null; className: string }) {
+  return (
+    <th style={{ minWidth: SCORE_W }} className={cn(summaryHead, 'align-bottom', className)} data-folded="">
+      <div className="leading-tight">{label}</div>
+      <div className="tabular text-[11px] font-normal text-slate-500">{total !== null ? `(/ ${total})` : ''}</div>
+    </th>
+  );
+}
+
+/** A student's computed component score while its group is folded. */
+function SummaryCell({ outcome, pick }: { outcome: TermOutcome; pick: 'cs' | 'we' }) {
+  return (
+    <td className="border-b border-r border-slate-200 bg-slate-50 p-0 group-focus-within:bg-sky-50/50">
+      <div className="tabular flex h-8 items-center justify-end px-2 text-sm font-semibold text-slate-700">
+        {outcome.kind === 'ok' ? outcome.result[pick].raw : <span className="font-normal text-slate-300">—</span>}
+      </div>
+    </td>
+  );
+}
+
+function SummaryFoot({ average, total, className }: { average: number | null; total: number | null; className: string }) {
+  return (
+    <td className={cn(className, 'px-2 py-1 text-right')} title="Class average of this total">
+      {average !== null ? (
+        <>
+          <div className="tabular">{average}</div>
+          {total ? <div className="tabular text-[11px] font-normal text-slate-500">{((average / total) * 100).toFixed(1)}%</div> : null}
+        </>
+      ) : (
+        <span className="font-normal text-slate-400">—</span>
+      )}
+    </td>
   );
 }
 
