@@ -5,29 +5,41 @@ import { Button } from './ui/button';
 
 const time = (at: number) => new Date(at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
-/** Save-state pill (header and gradebook): every change is confirmed as saved, or reported if it failed (TC-026/027). */
-export function SaveIndicator() {
+/**
+ * Save-state pill: every change is confirmed as saved, or reported if it failed (TC-026/027).
+ * `compact` is a single icon (collapsed sidebar); `showIdle` shows a calm "Autosave on" before the first change.
+ */
+export function SaveIndicator({ compact = false, showIdle = false }: { compact?: boolean; showIdle?: boolean }) {
   const { saveStatus, retrySave } = useStore();
-  const pill = 'inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium';
+  const pill = compact ? 'flex size-9 items-center justify-center rounded-md' : 'inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium';
   switch (saveStatus.state) {
     case 'idle':
-      return null;
+      return showIdle ? (
+        <span className={cn(pill, 'bg-slate-100 text-slate-600')} role="status" title="Changes are saved in this browser as you type">
+          <Check className="size-3.5" /> {!compact && 'Autosave on'}
+        </span>
+      ) : null;
     case 'saving':
       return (
-        <span className={cn(pill, 'bg-amber-50 text-amber-800')} role="status">
-          <LoaderCircle className="size-3.5 animate-spin" /> Saving…
+        <span className={cn(pill, 'bg-amber-50 text-amber-800')} role="status" title="Saving…">
+          <LoaderCircle className="size-3.5 animate-spin" /> {!compact && 'Saving…'}
         </span>
       );
     case 'saved':
       return (
-        <span className={cn(pill, 'bg-emerald-50 text-emerald-800')} role="status" title={`Saved in this browser at ${new Date(saveStatus.at).toLocaleString()}`}>
-          <Check className="size-3.5" /> Autosaved <span className="font-normal text-emerald-700/80">· {time(saveStatus.at)}</span>
+        <span className={cn(pill, 'bg-emerald-50 text-emerald-800')} role="status" title={`Autosaved in this browser at ${new Date(saveStatus.at).toLocaleString()}`}>
+          <Check className="size-3.5" />
+          {!compact && (
+            <>
+              Autosaved <span className="font-normal text-emerald-700/80">· {time(saveStatus.at)}</span>
+            </>
+          )}
         </span>
       );
     case 'error':
       return (
-        <button onClick={retrySave} className={cn(pill, 'bg-red-50 font-semibold text-red-700 ring-1 ring-red-300 hover:bg-red-100')} role="alert">
-          <AlertTriangle className="size-3.5" /> Not saved · Retry
+        <button onClick={retrySave} title="Not saved. Click to retry." className={cn(pill, 'bg-red-50 font-semibold text-red-700 ring-1 ring-red-300 hover:bg-red-100')} role="alert">
+          <AlertTriangle className="size-3.5" /> {!compact && 'Not saved · Retry'}
         </button>
       );
   }

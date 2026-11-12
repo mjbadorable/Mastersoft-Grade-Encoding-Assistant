@@ -11,19 +11,24 @@ import {
 import { backUpWorkspace } from '../app/backupActions';
 import { useActiveClass, useStore } from '../app/store';
 import { downloadFile } from '../lib/download';
+import { cn } from '../lib/utils';
 import { Button } from './ui/button';
 import { Dialog, DialogContent } from './ui/dialog';
 
 const classTitle = (c: { subjectCode: string; subjectName: string; section: string }) =>
   [c.subjectCode, c.subjectName, c.section].filter(Boolean).join(' · ') || 'Untitled';
 
-/** Header buttons: download the open class or every class as a JSON backup, or restore one (D9). */
-export function BackupRestore() {
+const row =
+  'flex w-full items-center gap-2.5 rounded-lg px-3 py-1.5 text-left text-xs text-slate-600 transition-colors duration-150 hover:bg-slate-100 hover:text-brand disabled:opacity-50';
+
+/** Sidebar buttons: download the open class or every class as a JSON backup, or restore one (D9). `compact` is icons only (collapsed sidebar). */
+export function BackupRestore({ compact = false }: { compact?: boolean }) {
   const active = useActiveClass();
   const { classes, restoreClass, restoreWorkspace, backedUp, markBackedUp } = useStore();
   const input = useRef<HTMLInputElement>(null);
   const menu = useRef<HTMLDivElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [anchor, setAnchor] = useState({ left: 0, bottom: 0 });
   // The open class has students and changed since its last backup (or was never backed up).
   const fingerprint = useMemo(() => (active ? backupFingerprint(active) : null), [active]);
   const needsBackup = !!active && active.students.length > 0 && backedUp[active.id] !== fingerprint;
@@ -37,9 +42,15 @@ export function BackupRestore() {
     };
     document.addEventListener('mousedown', close);
     document.addEventListener('keydown', close);
+    // The menu is fixed to the screen, so it closes when the sidebar scrolls or the window changes size.
+    const dismiss = () => setMenuOpen(false);
+    window.addEventListener('resize', dismiss);
+    window.addEventListener('scroll', dismiss, true);
     return () => {
       document.removeEventListener('mousedown', close);
       document.removeEventListener('keydown', close);
+      window.removeEventListener('resize', dismiss);
+      window.removeEventListener('scroll', dismiss, true);
     };
   }, [menuOpen]);
 
@@ -79,25 +90,42 @@ export function BackupRestore() {
 
   return (
     <>
-      <div ref={menu} className="relative">
+      <div ref={menu} className={compact ? undefined : 'w-full'}>
         <button
-          onClick={() => setMenuOpen((o) => !o)}
+          onClick={(e) => {
+            const r = e.currentTarget.getBoundingClientRect();
+            // The sidebar scrolls, so the menu is fixed to the screen: above the button, or beside it in the narrow rail.
+            setAnchor(compact ? { left: r.right + 8, bottom: window.innerHeight - r.bottom } : { left: r.left, bottom: window.innerHeight - r.top + 4 });
+            setMenuOpen((o) => !o);
+          }}
           disabled={!active}
           aria-haspopup="menu"
           aria-expanded={menuOpen}
-          className="flex items-center gap-1 text-xs text-white/85 hover:text-white disabled:opacity-50"
+          aria-label={compact ? 'Backup' : undefined}
+          className={cn(row, compact && 'relative size-9 justify-center px-0')}
           title={
             needsBackup
               ? 'This class changed since its last backup. Download a backup file: it is your only copy outside this browser.'
               : 'Download a backup file'
           }
         >
-          <Download className="size-4" /> Backup
-          <ChevronDown className="size-3" />
-          {needsBackup && <span className="rounded bg-amber-300 px-1.5 py-px text-[10px] font-semibold text-amber-950">Not backed up</span>}
+          <Download className="size-4" />
+          {compact ? (
+            needsBackup && <span aria-hidden className="absolute right-1 top-1 size-2 rounded-full bg-amber-500 ring-2 ring-white" />
+          ) : (
+            <>
+              Backup
+              <ChevronDown className="size-3 text-slate-400" />
+              {needsBackup && <span className="ml-auto whitespace-nowrap rounded-full bg-amber-100 px-2 py-px text-[10px] font-semibold text-amber-800">Not backed up</span>}
+            </>
+          )}
         </button>
         {menuOpen && active && (
-          <div role="menu" className="absolute right-0 top-full z-50 mt-1 w-64 rounded-md border border-slate-200 bg-white py-1 text-sm text-slate-800 shadow-lg">
+          <div
+            role="menu"
+            style={{ left: anchor.left, bottom: anchor.bottom }}
+            className="fixed z-50 w-64 rounded-md border border-slate-200 bg-white py-1 text-sm text-slate-800 shadow-lg"
+          >
             <button role="menuitem" onClick={backUpActive} className="block w-full px-3 py-2 text-left hover:bg-slate-50">
               Back up active class ({active.subjectCode || 'Untitled'})
             </button>
@@ -107,8 +135,13 @@ export function BackupRestore() {
           </div>
         )}
       </div>
-      <button onClick={() => input.current?.click()} className="flex items-center gap-1 text-xs text-white/85 hover:text-white" title="Restore from a backup file">
-        <ArchiveRestore className="size-4" /> Restore
+      <button
+        onClick={() => input.current?.click()}
+        aria-label={compact ? 'Restore' : undefined}
+        className={cn(row, compact && 'size-9 justify-center px-0')}
+        title="Restore from a backup file"
+      >
+        <ArchiveRestore className="size-4" /> {!compact && 'Restore'}
       </button>
       <input ref={input} type="file" accept=".json,application/json" className="sr-only" onChange={(e) => void choose(e)} aria-label="Backup file to restore" />
 

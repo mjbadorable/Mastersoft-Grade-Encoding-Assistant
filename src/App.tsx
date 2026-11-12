@@ -1,38 +1,22 @@
-import { ChevronLeft, ChevronRight, ShieldCheck, SlidersHorizontal } from 'lucide-react';
-import pkg from '../package.json';
 import { useEffect, useState } from 'react';
-import logoMark from './assets/logo-mark.png';
-import { TERM_LABEL } from './app/labels';
 import { useActiveClass, useStore } from './app/store';
 import { AllClassesOverview } from './components/AllClassesOverview';
 import { BackupReminder } from './components/BackupReminder';
 import { DemoBanner } from './components/DemoBanner';
-import { BackupRestore } from './components/BackupRestore';
 import { BreakdownDrawer } from './components/BreakdownDrawer';
 import { ClassDialog } from './components/ClassDialog';
 import { ConfirmHost } from './components/ConfirmDialog';
 import { MastersoftImportDialog } from './components/MastersoftDialogs';
 import { ObeDashboard } from './components/ObeDashboard';
 import { FinalRatingSummary } from './components/FinalRatingSummary';
-import { OfflineIndicator } from './components/OfflineStatus';
 import { PrivacyNotice } from './components/PrivacyNotice';
 import { ReverseMode } from './components/ReverseMode';
-import { SaveErrorBanner, SaveIndicator } from './components/SaveStatus';
+import { SaveErrorBanner } from './components/SaveStatus';
 import { Sidebar } from './components/Sidebar';
 import { TermGradebook } from './components/TermGradebook';
 import { TransmutationReference } from './components/TransmutationReference';
 import { TrashNotice } from './components/TrashNotice';
 import { Button } from './components/ui/button';
-import { rules } from './engine';
-
-const HEADER_TOOLS_KEY = 'headerToolsOpen';
-const readHeaderTools = () => {
-  try {
-    return localStorage.getItem(HEADER_TOOLS_KEY) === '1';
-  } catch {
-    return false;
-  }
-};
 
 export function App() {
   const { loaded, noticeSeen, acceptNotice, load, view, loadDemoClass } = useStore();
@@ -40,16 +24,6 @@ export function App() {
   const [privacyOpen, setPrivacyOpen] = useState(false);
   const [newClass, setNewClass] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
-  const [headerToolsOpen, setHeaderToolsOpen] = useState(readHeaderTools);
-  const toggleHeaderTools = () => {
-    const next = !headerToolsOpen;
-    setHeaderToolsOpen(next);
-    try {
-      localStorage.setItem(HEADER_TOOLS_KEY, next ? '1' : '0');
-    } catch {
-      // Not saved; tools start collapsed next time.
-    }
-  };
 
   useEffect(() => {
     void load();
@@ -96,55 +70,6 @@ export function App() {
 
   return (
     <div className="flex h-screen flex-col">
-      <header className="flex h-12 shrink-0 items-center gap-3 bg-brand px-4 text-white">
-        <img src={logoMark} alt="" className="size-8 shrink-0 rounded-md" />
-        {active ? (
-          <h1 className="min-w-0 truncate text-sm font-semibold" title="The open class">
-            {active.subjectCode}
-            {active.subjectName && ` – ${active.subjectName}`}
-            {active.section && <span className="font-normal text-white/80"> · {active.section}</span>}
-            {view !== 'TABLE' && view !== 'OVERVIEW' && view !== 'SUMMARY' && view !== 'REVERSE' && view !== 'OBE' && (
-              <span className="font-normal text-white/80"> · {TERM_LABEL[view]}</span>
-            )}
-          </h1>
-        ) : (
-          <h1 className="text-sm font-semibold tracking-wide">Mastersoft Grade Encoding Assistant</h1>
-        )}
-        <span className="ml-auto" />
-        <OfflineIndicator />
-        <SaveIndicator />
-        {headerToolsOpen && (
-          <div className="flex items-center gap-3">
-            <span className="rounded bg-white/15 px-2 py-0.5 text-xs" title="Version of this app">
-              v{pkg.version}
-            </span>
-            <span className="rounded bg-white/15 px-2 py-0.5 text-xs" title="Version of the Mastersoft rules file">
-              Rules v{rules.version}
-            </span>
-            <BackupRestore />
-            <button onClick={() => setPrivacyOpen(true)} className="flex items-center gap-1 text-xs text-white/85 transition-colors duration-150 hover:text-white">
-              <ShieldCheck className="size-4" /> Data Privacy
-            </button>
-          </div>
-        )}
-        <button
-          type="button"
-          onClick={toggleHeaderTools}
-          aria-expanded={headerToolsOpen}
-          title={headerToolsOpen ? 'Hide version, backup, and privacy tools' : 'Show version, backup, and privacy tools'}
-          className="flex items-center gap-1 rounded-md bg-white/15 px-2 py-1 text-xs font-medium text-white transition-colors duration-150 hover:bg-white/25"
-        >
-          {headerToolsOpen ? (
-            <ChevronRight className="size-3.5" />
-          ) : (
-            <>
-              <ChevronLeft className="size-3.5" />
-              <SlidersHorizontal className="size-3.5" />
-              <span>Tools</span>
-            </>
-          )}
-        </button>
-      </header>
       <SaveErrorBanner />
       <BackupReminder />
       {active?.demo && <DemoBanner key={active.id} classId={active.id} />}

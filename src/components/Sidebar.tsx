@@ -1,16 +1,20 @@
-import { BookOpen, BookOpenCheck, Calculator, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, FileUp, Keyboard, LayoutGrid, PanelLeftClose, PanelLeftOpen, Pencil, Plus, ShieldCheck, Table2, Target } from 'lucide-react';
+import { BookOpen, BookOpenCheck, Calculator, CheckCircle2, ChevronDown, ChevronRight, CircleHelp, ClipboardList, FileUp, Keyboard, LayoutGrid, PanelLeftClose, PanelLeftOpen, Pencil, Plus, ShieldCheck, Table2, Target } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
+import pkg from '../../package.json';
 import logo from '../assets/logo.png';
 import logoMark from '../assets/logo-mark.png';
 import { TERM_LABEL, termWeightLabel } from '../app/labels';
 import { termProgress } from '../app/progress';
 import { isLiveClass, useActiveClass, useStore } from '../app/store';
 import type { ClassRecord, View } from '../app/types';
-import { TERMS, type Term } from '../engine';
+import { rules, TERMS, type Term } from '../engine';
 import { cn } from '../lib/utils';
+import { BackupRestore } from './BackupRestore';
 import { ClassDialog } from './ClassDialog';
 import { EncodingGuideDialog } from './EncodingGuide';
 import { MastersoftImportDialog } from './MastersoftDialogs';
+import { OfflineIndicator } from './OfflineStatus';
+import { SaveIndicator } from './SaveStatus';
 import { ShortcutsDialog } from './ShortcutsDialog';
 import { Button } from './ui/button';
 import { Select } from './ui/input';
@@ -140,9 +144,25 @@ export function Sidebar({ onPrivacy }: { onPrivacy: () => void }) {
           {railItem('REVERSE', <Calculator className={rail} />, 'Final Rating Only')}
           {railItem('TABLE', <Table2 className={rail} />, 'Transmutation table')}
         </nav>
-        <button onClick={onPrivacy} title="Data Privacy Notice" aria-label="Data Privacy Notice" className="flex size-9 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-brand">
-          <ShieldCheck className={rail} />
-        </button>
+        <div className="flex flex-col items-center gap-0.5 border-t border-slate-200 pt-1">
+          <SaveIndicator compact showIdle />
+          <OfflineIndicator compact />
+          <BackupRestore compact />
+          <button
+            onClick={() => {
+              setHelpOpen(true);
+              toggleCollapsed();
+            }}
+            title="Help: Encoding Guide, keyboard shortcuts (opens the sidebar)"
+            aria-label="Help"
+            className="flex size-9 items-center justify-center rounded-md text-slate-500 transition-colors duration-150 hover:bg-slate-100 hover:text-brand"
+          >
+            <CircleHelp className={rail} />
+          </button>
+          <button onClick={onPrivacy} title="Data Privacy Notice" aria-label="Data Privacy Notice" className="flex size-9 items-center justify-center rounded-md text-slate-500 transition-colors duration-150 hover:bg-slate-100 hover:text-brand">
+            <ShieldCheck className={rail} />
+          </button>
+        </div>
       </aside>
     );
   }
@@ -211,6 +231,20 @@ export function Sidebar({ onPrivacy }: { onPrivacy: () => void }) {
         {item('TABLE', <Table2 className="size-4" />, 'Transmutation table')}
       </nav>
 
+      <div className="sticky bottom-0 mt-auto bg-white">
+      <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 px-3 py-2" aria-label="Status">
+        <SaveIndicator showIdle />
+        <OfflineIndicator />
+      </div>
+
+      <div className="space-y-0.5 border-t border-slate-200 p-2">
+        <p className="px-3 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Workspace &amp; backup</p>
+        <BackupRestore />
+        <button onClick={onPrivacy} className={footLink}>
+          <ShieldCheck className="size-4" /> Data Privacy Notice
+        </button>
+      </div>
+
       <div className="space-y-0.5 border-t border-slate-200 p-2">
         <button
           type="button"
@@ -231,12 +265,14 @@ export function Sidebar({ onPrivacy }: { onPrivacy: () => void }) {
             <button onClick={() => setShortcutsOpen(true)} className={footLink}>
               <Keyboard className="size-4" /> Keyboard shortcuts
             </button>
-            <button onClick={onPrivacy} className={footLink}>
-              <ShieldCheck className="size-4" /> Data Privacy Notice
-            </button>
           </>
         )}
+        <p className="px-3 pt-1 text-[11px] text-slate-400" title="App version · version of the Mastersoft rules file">
+          v{pkg.version} · Rules v{rules.version}
+        </p>
       </div>
+      </div>
+
 
       {active && <EncodingGuideDialog record={active} term={guideTerm} open={guideOpen} onOpenChange={setGuideOpen} />}
       <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
