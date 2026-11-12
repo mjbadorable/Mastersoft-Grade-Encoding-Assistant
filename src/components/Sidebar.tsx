@@ -9,7 +9,7 @@ import { isLiveClass, useActiveClass, useStore } from '../app/store';
 import type { ClassRecord, View } from '../app/types';
 import { rules, TERMS, type Term } from '../engine';
 import { cn } from '../lib/utils';
-import { BackupRestore } from './BackupRestore';
+import { BackupRestore, sidebarRow, useNeedsBackup } from './BackupRestore';
 import { ClassDialog } from './ClassDialog';
 import { EncodingGuideDialog } from './EncodingGuide';
 import { MastersoftImportDialog } from './MastersoftDialogs';
@@ -19,9 +19,9 @@ import { ShortcutsDialog } from './ShortcutsDialog';
 import { Button } from './ui/button';
 import { Select } from './ui/input';
 
-const footLink = 'flex w-full items-center gap-2.5 rounded-lg px-3 py-1.5 text-left text-xs text-slate-600 transition-colors duration-150 hover:bg-slate-100 hover:text-brand';
 const COLLAPSED_KEY = 'sidebarCollapsed';
 const HELP_OPEN_KEY = 'sidebarHelpOpen';
+const WORKSPACE_OPEN_KEY = 'sidebarWorkspaceOpen';
 const readFlag = (key: string) => {
   try {
     return localStorage.getItem(key) === '1';
@@ -38,19 +38,27 @@ export function Sidebar({ onPrivacy }: { onPrivacy: () => void }) {
   const [dialog, setDialog] = useState<'new' | 'edit' | 'import' | null>(null);
   const [collapsed, setCollapsed] = useState(() => readFlag(COLLAPSED_KEY));
   const [helpOpen, setHelpOpen] = useState(() => readFlag(HELP_OPEN_KEY));
+  const [workspaceOpen, setWorkspaceOpen] = useState(() => readFlag(WORKSPACE_OPEN_KEY));
+  const needsBackup = useNeedsBackup();
   const [guideOpen, setGuideOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   /** The Encoding Guide is per term: the open term, or Prelim from any other screen. */
   const guideTerm: Term = (TERMS as readonly string[]).includes(view) ? (view as Term) : 'PRELIM';
 
-  const toggleHelp = () => {
-    const next = !helpOpen;
-    setHelpOpen(next);
+  const remember = (key: string, open: boolean) => {
     try {
-      localStorage.setItem(HELP_OPEN_KEY, next ? '1' : '0');
+      localStorage.setItem(key, open ? '1' : '0');
     } catch {
       // Not saved; the section starts collapsed again next time.
     }
+  };
+  const toggleHelp = () => {
+    setHelpOpen(!helpOpen);
+    remember(HELP_OPEN_KEY, !helpOpen);
+  };
+  const toggleWorkspace = () => {
+    setWorkspaceOpen(!workspaceOpen);
+    remember(WORKSPACE_OPEN_KEY, !workspaceOpen);
   };
 
   const toggleCollapsed = () => {
@@ -231,46 +239,32 @@ export function Sidebar({ onPrivacy }: { onPrivacy: () => void }) {
         {item('TABLE', <Table2 className="size-4" />, 'Transmutation table')}
       </nav>
 
-      <div className="sticky bottom-0 mt-auto bg-white">
-      <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 px-3 py-2" aria-label="Status">
-        <SaveIndicator showIdle />
-        <OfflineIndicator />
-      </div>
+      <div className="sticky bottom-0 mt-auto space-y-1 border-t border-slate-200 bg-slate-50 p-2">
+        <div className="flex flex-wrap items-center gap-2 px-2 py-1" aria-label="Status">
+          <SaveIndicator showIdle />
+          <OfflineIndicator />
+        </div>
 
-      <div className="space-y-0.5 border-t border-slate-200 p-2">
-        <p className="px-3 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Workspace &amp; backup</p>
-        <BackupRestore />
-        <button onClick={onPrivacy} className={footLink}>
-          <ShieldCheck className="size-4" /> Data Privacy Notice
-        </button>
-      </div>
+        <FooterSection title="Workspace & backup" open={workspaceOpen} onToggle={toggleWorkspace} badge={needsBackup && !workspaceOpen ? 'Due' : undefined}>
+          <BackupRestore />
+          <button onClick={onPrivacy} className={sidebarRow}>
+            <ShieldCheck className="size-4" /> Data Privacy Notice
+          </button>
+        </FooterSection>
 
-      <div className="space-y-0.5 border-t border-slate-200 p-2">
-        <button
-          type="button"
-          onClick={toggleHelp}
-          aria-expanded={helpOpen}
-          className="flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 transition-colors duration-150 hover:bg-slate-100 hover:text-slate-700"
-        >
-          <span>Help</span>
-          {helpOpen ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
-        </button>
-        {helpOpen && (
-          <>
-            {active && (
-              <button onClick={() => setGuideOpen(true)} className={footLink}>
-                <BookOpenCheck className="size-4" /> Encoding Guide
-              </button>
-            )}
-            <button onClick={() => setShortcutsOpen(true)} className={footLink}>
-              <Keyboard className="size-4" /> Keyboard shortcuts
+        <FooterSection title="Help" open={helpOpen} onToggle={toggleHelp}>
+          {active && (
+            <button onClick={() => setGuideOpen(true)} className={sidebarRow}>
+              <BookOpenCheck className="size-4" /> Encoding Guide
             </button>
-          </>
-        )}
-        <p className="px-3 pt-1 text-[11px] text-slate-400" title="App version · version of the Mastersoft rules file">
-          v{pkg.version} · Rules v{rules.version}
-        </p>
-      </div>
+          )}
+          <button onClick={() => setShortcutsOpen(true)} className={sidebarRow}>
+            <Keyboard className="size-4" /> Keyboard shortcuts
+          </button>
+          <p className="px-3 pb-1 pt-1 text-[11px] text-slate-400" title="App version · version of the Mastersoft rules file">
+            v{pkg.version} · Rules v{rules.version}
+          </p>
+        </FooterSection>
       </div>
 
 
@@ -305,5 +299,24 @@ function TermMark({ record, term }: { record: ClassRecord; term: Term }) {
     <span className="rounded-full bg-amber-100 px-1.5 text-[10px] font-semibold text-amber-800" title={`${left} student(s) still need scores`}>
       {left}
     </span>
+  );
+}
+
+/** Footer accordion: a quiet header with a chevron; `badge` stays visible while the section is folded. */
+function FooterSection({ title, open, onToggle, badge, children }: { title: string; open: boolean; onToggle: () => void; badge?: string; children: ReactNode }) {
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="flex w-full items-center gap-2 rounded-lg px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500 transition-colors duration-150 hover:bg-slate-100 hover:text-slate-700"
+      >
+        <span>{title}</span>
+        {badge && <span className="rounded-full bg-amber-100 px-2 py-px text-[10px] font-semibold normal-case tracking-normal text-amber-800">{badge}</span>}
+        {open ? <ChevronDown className="ml-auto size-3.5" /> : <ChevronRight className="ml-auto size-3.5" />}
+      </button>
+      {open && <div className="mt-0.5 space-y-0.5">{children}</div>}
+    </div>
   );
 }

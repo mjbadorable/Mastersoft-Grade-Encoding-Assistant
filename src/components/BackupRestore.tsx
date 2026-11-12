@@ -18,20 +18,28 @@ import { Dialog, DialogContent } from './ui/dialog';
 const classTitle = (c: { subjectCode: string; subjectName: string; section: string }) =>
   [c.subjectCode, c.subjectName, c.section].filter(Boolean).join(' · ') || 'Untitled';
 
-const row =
-  'flex w-full items-center gap-2.5 rounded-lg px-3 py-1.5 text-left text-xs text-slate-600 transition-colors duration-150 hover:bg-slate-100 hover:text-brand disabled:opacity-50';
+/** One sidebar footer row: identical padding, icon size and icon-to-label gap for Backup, Restore, Data Privacy and the Help links. */
+export const sidebarRow =
+  'flex w-full items-center justify-start gap-2.5 rounded-lg px-3 py-1.5 text-left text-xs text-slate-600 transition-colors duration-150 hover:bg-slate-100 hover:text-brand disabled:opacity-50';
+const row = sidebarRow;
+
+/** The open class has students and changed since its last backup (or was never backed up). */
+export function useNeedsBackup(): boolean {
+  const active = useActiveClass();
+  const backedUp = useStore((s) => s.backedUp);
+  const fingerprint = useMemo(() => (active ? backupFingerprint(active) : null), [active]);
+  return !!active && active.students.length > 0 && backedUp[active.id] !== fingerprint;
+}
 
 /** Sidebar buttons: download the open class or every class as a JSON backup, or restore one (D9). `compact` is icons only (collapsed sidebar). */
 export function BackupRestore({ compact = false }: { compact?: boolean }) {
   const active = useActiveClass();
-  const { classes, restoreClass, restoreWorkspace, backedUp, markBackedUp } = useStore();
+  const { classes, restoreClass, restoreWorkspace, markBackedUp } = useStore();
   const input = useRef<HTMLInputElement>(null);
   const menu = useRef<HTMLDivElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [anchor, setAnchor] = useState({ left: 0, bottom: 0 });
-  // The open class has students and changed since its last backup (or was never backed up).
-  const fingerprint = useMemo(() => (active ? backupFingerprint(active) : null), [active]);
-  const needsBackup = !!active && active.students.length > 0 && backedUp[active.id] !== fingerprint;
+  const needsBackup = useNeedsBackup();
   const [pending, setPending] = useState<ParsedBackup | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -115,8 +123,8 @@ export function BackupRestore({ compact = false }: { compact?: boolean }) {
           ) : (
             <>
               Backup
-              <ChevronDown className="size-3 text-slate-400" />
               {needsBackup && <span className="ml-auto whitespace-nowrap rounded-full bg-amber-100 px-2 py-px text-[10px] font-semibold text-amber-800">Not backed up</span>}
+              <ChevronDown className={cn('size-3 text-slate-400', !needsBackup && 'ml-auto')} />
             </>
           )}
         </button>
