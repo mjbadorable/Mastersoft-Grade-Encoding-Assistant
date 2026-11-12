@@ -19,7 +19,7 @@ const hostingHeaders = Object.fromEntries(
  * on first visit, and a version that changes whenever any of them changes.
  */
 function offline(): Plugin {
-  const publicFiles = ['manifest.webmanifest', 'icon.svg'];
+  const publicFiles = ['manifest.webmanifest', 'icon.svg', 'icon.png'];
   return {
     name: 'offline',
     apply: 'build',

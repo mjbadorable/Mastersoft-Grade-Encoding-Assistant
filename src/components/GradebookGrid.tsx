@@ -295,9 +295,11 @@ export function GradebookGrid({ record, term, onEditColumn, onAddColumn, onAddSt
       title={extra?.invalid}
       inputMode={extra?.numeric ? 'decimal' : undefined}
       className={cn(
-        'h-8 w-full bg-transparent px-2 text-sm outline-none focus:bg-white focus:ring-2 focus:ring-inset focus:ring-brand/60',
+        extra?.numeric
+          ? 'h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-sm outline-none transition-colors duration-150 hover:border-slate-300 focus:border-brand focus:ring-2 focus:ring-brand/25'
+          : 'h-10 w-full bg-transparent px-2 text-sm outline-none focus:bg-white focus:ring-2 focus:ring-inset focus:ring-brand/60',
         extra?.numeric && 'tabular text-right',
-        extra?.invalid && 'bg-red-50 text-red-700 ring-1 ring-inset ring-red-400',
+        extra?.invalid && 'border-red-400 bg-red-50 text-red-700 ring-1 ring-inset ring-red-400',
       )}
     />
   );
@@ -308,6 +310,7 @@ export function GradebookGrid({ record, term, onEditColumn, onAddColumn, onAddSt
     ...(weighted ? [{ key: 'rawsum', head: 'Raw-sum TG', sub: 'comparison' }] : []),
     { key: 'tg', head: 'Term Grade', sub: '' },
     { key: 'pg', head: 'Point Grade', sub: '' },
+    { key: 'remarks', head: 'Remarks', sub: '' },
   ];
   // Only the student columns are frozen, and only what fits, so they never cover the scores.
   // The output columns flow after the scores like any spreadsheet column.
@@ -528,7 +531,7 @@ export function GradebookGrid({ record, term, onEditColumn, onAddColumn, onAddSt
                     onChange={(e) => setStatus(student.id, term, (e.target.value || undefined) as Status | undefined)}
                     title={carried ? `${STATUS_NAME[outcome.status]}: carried forward from an earlier term` : 'Mastersoft status for this term'}
                     aria-label={`Status for ${student.name || `row ${row + 1}`}`}
-                    className={cn('h-8 w-full bg-transparent px-1 text-xs text-slate-400 outline-none focus:ring-2 focus:ring-inset focus:ring-brand/60', (ownStatus || carried) && 'font-semibold text-brand', carried && 'italic')}
+                    className={cn('h-10 w-full bg-transparent px-1 text-xs text-slate-400 outline-none focus:ring-2 focus:ring-inset focus:ring-brand/60', (ownStatus || carried) && 'font-semibold text-brand', carried && 'italic')}
                   >
                     <option value="">—</option>
                     {STATUSES.map((s) => (
@@ -545,7 +548,7 @@ export function GradebookGrid({ record, term, onEditColumn, onAddColumn, onAddSt
                   const text = student.scores[c.id] ?? '';
                   const parsed = parseScore(text, c.maxScore);
                   return (
-                    <td key={c.id} className={cn(td, 'group-hover:bg-slate-50 group-focus-within:bg-sky-50/50', outcome.kind === 'status' && 'bg-slate-50')}>
+                    <td key={c.id} className={cn(td, 'p-1 group-hover:bg-slate-50 group-focus-within:bg-sky-50/50', outcome.kind === 'status' && 'bg-slate-50')}>
                       {cellInput(student, row, i + 2, text, (v) => setScore(student.id, c.id, v), {
                         numeric: true,
                         label: c.label,
@@ -565,7 +568,7 @@ export function GradebookGrid({ record, term, onEditColumn, onAddColumn, onAddSt
                         if (col !== undefined) focusCell(row, col);
                         else openDrawer({ studentId: student.id, term });
                       }}
-                      className="flex h-8 w-full items-center justify-end gap-1 px-2 text-right hover:bg-brand/10"
+                      className="flex h-10 w-full items-center justify-end gap-1 px-2 text-right transition-colors duration-150 hover:bg-brand/10"
                       title={outcome.kind === 'incomplete' || outcome.kind === 'invalid' ? 'Go to the score that needs attention' : 'Show the step-by-step breakdown'}
                     >
                       <OutputCell outcome={outcome} column={o.key} first={i === 0} />
@@ -742,7 +745,7 @@ function SummaryHead({ label, total, className }: { label: string; total: number
 function SummaryCell({ outcome, pick }: { outcome: TermOutcome; pick: 'cs' | 'we' }) {
   return (
     <td className="border-b border-r border-slate-200 bg-slate-50 p-0 group-focus-within:bg-sky-50/50">
-      <div className="tabular flex h-8 items-center justify-end px-2 text-sm font-semibold text-slate-700">
+      <div className="tabular flex h-10 items-center justify-end px-2 text-sm font-semibold text-slate-700">
         {outcome.kind === 'ok' ? outcome.result[pick].raw : <span className="font-normal text-slate-300">—</span>}
       </div>
     </td>
@@ -993,6 +996,14 @@ function OutputCell({ outcome, column, first }: { outcome: TermOutcome; column: 
             )}
             <span className={cn('tabular font-semibold', result.termGrade < rules.passingGrade && 'text-red-600')}>{result.termGrade}</span>
           </>
+        );
+      }
+      if (column === 'remarks') {
+        const passed = result.termGrade >= rules.passingGrade;
+        return (
+          <Badge variant={passed ? 'green' : 'red'} title="Term grade against the passing grade of 75. The course result comes from the Final Rating.">
+            {passed ? 'Passed' : 'Failed'}
+          </Badge>
         );
       }
       const pg = result.termPointGrade;

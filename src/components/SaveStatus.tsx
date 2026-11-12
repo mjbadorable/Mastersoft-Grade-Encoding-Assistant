@@ -1,30 +1,32 @@
 import { AlertTriangle, Check, LoaderCircle, RotateCw } from 'lucide-react';
 import { useStore } from '../app/store';
+import { cn } from '../lib/utils';
 import { Button } from './ui/button';
 
 const time = (at: number) => new Date(at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
-/** Header indicator: every change is confirmed as saved, or reported if it failed (TC-026/027). */
+/** Save-state pill (header and gradebook): every change is confirmed as saved, or reported if it failed (TC-026/027). */
 export function SaveIndicator() {
   const { saveStatus, retrySave } = useStore();
+  const pill = 'inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium';
   switch (saveStatus.state) {
     case 'idle':
       return null;
     case 'saving':
       return (
-        <span className="flex items-center gap-1 text-xs text-white/85" role="status">
+        <span className={cn(pill, 'bg-amber-50 text-amber-800')} role="status">
           <LoaderCircle className="size-3.5 animate-spin" /> Saving…
         </span>
       );
     case 'saved':
       return (
-        <span className="flex items-center gap-1 text-xs text-white/85" role="status" title={`Saved in this browser at ${new Date(saveStatus.at).toLocaleString()}`}>
-          <Check className="size-3.5" /> Saved {time(saveStatus.at)}
+        <span className={cn(pill, 'bg-emerald-50 text-emerald-800')} role="status" title={`Saved in this browser at ${new Date(saveStatus.at).toLocaleString()}`}>
+          <Check className="size-3.5" /> Autosaved <span className="font-normal text-emerald-700/80">· {time(saveStatus.at)}</span>
         </span>
       );
     case 'error':
       return (
-        <button onClick={retrySave} className="flex items-center gap-1 rounded bg-white px-2 py-0.5 text-xs font-semibold text-brand" role="alert">
+        <button onClick={retrySave} className={cn(pill, 'bg-red-50 font-semibold text-red-700 ring-1 ring-red-300 hover:bg-red-100')} role="alert">
           <AlertTriangle className="size-3.5" /> Not saved · Retry
         </button>
       );

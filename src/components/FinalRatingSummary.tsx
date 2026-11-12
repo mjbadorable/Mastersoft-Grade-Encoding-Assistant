@@ -1,4 +1,5 @@
 import { Download } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
 import { buildBatchZip, planAllTermsExport } from '../app/mastersoftFile';
 import { downloadFile, ZIP_TYPE } from '../lib/download';
 import { finalOutcome, formatPoint, termOutcome, type FinalOutcome } from '../app/gradebook';
@@ -10,13 +11,39 @@ import { cn } from '../lib/utils';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 
+type Filter = 'all' | 'passed' | 'failed' | 'attention';
+
+/** Passed or failed on the Final Rating; everything else (a status, or a Final Rating not yet possible) needs a look. */
+const resultOf = (o: FinalOutcome): Exclude<Filter, 'all'> => (o.kind !== 'rating' ? 'attention' : o.rating.grade >= rules.passingGrade ? 'passed' : 'failed');
+
+function Kpi({ label, tone, children, note }: { label: string; tone?: 'green' | 'red' | 'amber'; children: ReactNode; note?: string }) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+      <div className="text-xs font-medium text-slate-500">{label}</div>
+      <div className={cn('tabular text-2xl font-semibold', tone === 'green' ? 'text-emerald-700' : tone === 'red' ? 'text-red-600' : tone === 'amber' ? 'text-amber-700' : 'text-slate-900')}>{children}</div>
+      {note && <div className="text-[11px] text-slate-400">{note}</div>}
+    </div>
+  );
+}
+
 export function FinalRatingSummary({ record }: { record: ClassRecord }) {
   const openDrawer = useStore((s) => s.openDrawer);
+  const [filter, setFilter] = useState<Filter>('all');
   const batch = planAllTermsExport(record);
   const ready = batch.files.length;
   const blockedTitle = batch.blocked.map((b) => `${b.fileName}: ${b.reasons.join(' ')}`).join('\n');
+  const rows = record.students.map((s, i) => ({ s, i, final: finalOutcome(record, s) }));
+  const count = (f: Exclude<Filter, 'all'>) => rows.filter((r) => resultOf(r.final) === f).length;
+  const shown = filter === 'all' ? rows : rows.filter((r) => resultOf(r.final) === filter);
+  const allReady = batch.totalFiles > 0 && ready === batch.totalFiles;
   const th = 'border-b border-slate-200 bg-slate-100 px-3 py-2 text-left text-xs font-semibold text-slate-600';
   const td = 'border-b border-slate-200 px-3 py-1.5';
+  const pills: { id: Filter; label: string; n: number }[] = [
+    { id: 'all', label: 'All', n: rows.length },
+    { id: 'passed', label: 'Passed', n: count('passed') },
+    { id: 'failed', label: 'Failed', n: count('failed') },
+    { id: 'attention', label: 'Needs Attention', n: count('attention') },
+  ];
   return (
     <>
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-2.5">
@@ -34,7 +61,41 @@ export function FinalRatingSummary({ record }: { record: ClassRecord }) {
           <Download /> {ready === batch.totalFiles ? `Download ${ready} files (.zip)` : `Download ${ready} ready files (.zip)`}
         </Button>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto bg-white">
+
+      <div className="grid grid-cols-2 gap-3 px-4 pt-3 md:grid-cols-3 xl:grid-cols-5">
+        <Kpi label="Total Students">{rows.length}</Kpi>
+        <Kpi label="Passed" tone="green">
+          {count('passed')}
+        </Kpi>
+        <Kpi label="Failed" tone={count('failed') > 0 ? 'red' : undefined}>
+          {count('failed')}
+        </Kpi>
+        <Kpi label="Incomplete / Status" tone={count('attention') > 0 ? 'amber' : undefined} note="No Final Rating yet, or INC, DRP, …">
+          {count('attention')}
+        </Kpi>
+        <Kpi label="Export Readiness" tone={allReady ? 'green' : 'amber'} note={allReady ? 'Every file is ready' : blockedTitle ? 'Hover the download button for what is missing' : undefined}>
+          {ready} <span className="text-base font-normal text-slate-400">of {batch.totalFiles} files</span>
+        </Kpi>
+      </div>
+
+      <div role="tablist" aria-label="Show" className="flex flex-wrap gap-2 px-4 pt-3">
+        {pills.map((p) => (
+          <button
+            key={p.id}
+            role="tab"
+            aria-selected={filter === p.id}
+            onClick={() => setFilter(p.id)}
+            className={cn(
+              'rounded-full border px-3 py-1 text-sm font-medium transition-colors duration-150',
+              filter === p.id ? 'border-brand bg-brand text-white shadow-sm' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100',
+            )}
+          >
+            {p.label} <span className={cn('text-xs font-normal', filter === p.id ? 'text-white/80' : 'text-slate-400')}>({p.n})</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="mx-4 mb-3 mt-3 min-h-0 flex-1 overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm">
         <table className="tabular w-full border-separate border-spacing-0 text-sm">
           <thead className="sticky top-0">
             <tr>
@@ -46,11 +107,11 @@ export function FinalRatingSummary({ record }: { record: ClassRecord }) {
                   {TERM_LABEL[t]} <span className="font-normal text-slate-400">{termWeightLabel(t)}</span>
                 </th>
               ))}
-              <th className={cn(th, 'bg-brand/10 text-brand')}>Final Rating</th>
+              <th className={cn(th, 'bg-[#fef2f2] text-brand')}>Final Rating</th>
             </tr>
           </thead>
           <tbody>
-            {record.students.map((s, i) => (
+            {shown.map(({ s, i, final }) => (
               <tr key={s.id}>
                 <td className={cn(td, 'text-xs text-slate-500')}>{i + 1}</td>
                 <td className={td}>{s.studentId}</td>
@@ -59,7 +120,7 @@ export function FinalRatingSummary({ record }: { record: ClassRecord }) {
                   const o = termOutcome(record, s, t);
                   return (
                     <td key={t} className={cn(td, 'p-0 text-right')}>
-                      <button className="w-full px-3 py-1.5 text-right hover:bg-brand/5" onClick={() => openDrawer({ studentId: s.id, term: t })}>
+                      <button className="w-full px-3 py-1.5 text-right transition-colors duration-150 hover:bg-brand/5" onClick={() => openDrawer({ studentId: s.id, term: t })}>
                         {o.kind === 'ok' ? (
                           <span className={cn(o.result.termGrade < rules.passingGrade && 'text-red-600')}>
                             {o.result.termGrade} <span className="text-xs text-slate-400">({formatPoint(o.result.termPointGrade.point)})</span>
@@ -73,8 +134,8 @@ export function FinalRatingSummary({ record }: { record: ClassRecord }) {
                     </td>
                   );
                 })}
-                <td className={cn(td, 'bg-[#fdf6f6]')}>
-                  <FinalCell outcome={finalOutcome(record, s)} />
+                <td className={cn(td, 'bg-[#fff7f7]')}>
+                  <FinalCell outcome={final} />
                 </td>
               </tr>
             ))}
@@ -82,6 +143,13 @@ export function FinalRatingSummary({ record }: { record: ClassRecord }) {
               <tr>
                 <td colSpan={7} className="px-3 py-6 text-center text-sm text-slate-500">
                   No students yet. Add them in a term gradebook.
+                </td>
+              </tr>
+            )}
+            {record.students.length > 0 && shown.length === 0 && (
+              <tr>
+                <td colSpan={7} className="px-3 py-6 text-center text-sm text-slate-500">
+                  No students in this group.
                 </td>
               </tr>
             )}

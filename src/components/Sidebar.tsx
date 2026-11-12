@@ -1,5 +1,7 @@
-import { BookOpen, Calculator, CheckCircle2, ClipboardList, FileUp, LayoutGrid, PanelLeftClose, PanelLeftOpen, Pencil, Plus, ShieldCheck, Table2, Target } from 'lucide-react';
+import { BookOpen, BookOpenCheck, Calculator, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, FileUp, Keyboard, LayoutGrid, PanelLeftClose, PanelLeftOpen, Pencil, Plus, ShieldCheck, Table2, Target } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
+import logo from '../assets/logo.png';
+import logoMark from '../assets/logo-mark.png';
 import { TERM_LABEL, termWeightLabel } from '../app/labels';
 import { termProgress } from '../app/progress';
 import { isLiveClass, useActiveClass, useStore } from '../app/store';
@@ -7,14 +9,18 @@ import type { ClassRecord, View } from '../app/types';
 import { TERMS, type Term } from '../engine';
 import { cn } from '../lib/utils';
 import { ClassDialog } from './ClassDialog';
+import { EncodingGuideDialog } from './EncodingGuide';
 import { MastersoftImportDialog } from './MastersoftDialogs';
+import { ShortcutsDialog } from './ShortcutsDialog';
 import { Button } from './ui/button';
 import { Select } from './ui/input';
 
+const footLink = 'flex w-full items-center gap-2.5 rounded-lg px-3 py-1.5 text-left text-xs text-slate-600 transition-colors duration-150 hover:bg-slate-100 hover:text-brand';
 const COLLAPSED_KEY = 'sidebarCollapsed';
-const readCollapsed = () => {
+const HELP_OPEN_KEY = 'sidebarHelpOpen';
+const readFlag = (key: string) => {
   try {
-    return localStorage.getItem(COLLAPSED_KEY) === '1';
+    return localStorage.getItem(key) === '1';
   } catch {
     return false;
   }
@@ -26,7 +32,22 @@ export function Sidebar({ onPrivacy }: { onPrivacy: () => void }) {
   // Archived and trashed classes stay out of the list; an archived class opened from the overview is shown so the selector isn't blank.
   const listed = classes.filter((c) => isLiveClass(c) || (c.id === active?.id && !c.deletedAt));
   const [dialog, setDialog] = useState<'new' | 'edit' | 'import' | null>(null);
-  const [collapsed, setCollapsed] = useState(readCollapsed);
+  const [collapsed, setCollapsed] = useState(() => readFlag(COLLAPSED_KEY));
+  const [helpOpen, setHelpOpen] = useState(() => readFlag(HELP_OPEN_KEY));
+  const [guideOpen, setGuideOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  /** The Encoding Guide is per term: the open term, or Prelim from any other screen. */
+  const guideTerm: Term = (TERMS as readonly string[]).includes(view) ? (view as Term) : 'PRELIM';
+
+  const toggleHelp = () => {
+    const next = !helpOpen;
+    setHelpOpen(next);
+    try {
+      localStorage.setItem(HELP_OPEN_KEY, next ? '1' : '0');
+    } catch {
+      // Not saved; the section starts collapsed again next time.
+    }
+  };
 
   const toggleCollapsed = () => {
     const next = !collapsed;
@@ -59,8 +80,8 @@ export function Sidebar({ onPrivacy }: { onPrivacy: () => void }) {
       disabled={!enabled}
       aria-current={view === v ? 'page' : undefined}
       className={cn(
-        'flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-50',
-        (enabled || v === 'TABLE') && view === v && 'bg-brand/10 font-semibold text-brand hover:bg-brand/10',
+        'flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-slate-700 transition-colors duration-150 hover:bg-slate-100 disabled:opacity-50',
+        (enabled || v === 'TABLE') && view === v && 'bg-brand/10 font-semibold text-brand shadow-[inset_3px_0_0_0_var(--color-brand)] hover:bg-brand/10',
       )}
     >
       {icon}
@@ -78,7 +99,7 @@ export function Sidebar({ onPrivacy }: { onPrivacy: () => void }) {
       aria-label={label}
       aria-current={view === v ? 'page' : undefined}
       className={cn(
-        'relative flex size-9 items-center justify-center rounded-md text-slate-700 hover:bg-slate-100 disabled:opacity-50',
+        'relative flex size-9 items-center justify-center rounded-md text-slate-700 transition-colors duration-150 hover:bg-slate-100 disabled:opacity-50',
         (enabled || v === 'TABLE') && view === v && 'bg-brand/10 text-brand hover:bg-brand/10',
       )}
     >
@@ -91,6 +112,7 @@ export function Sidebar({ onPrivacy }: { onPrivacy: () => void }) {
     const rail = 'size-4';
     return (
       <aside className="flex w-14 shrink-0 flex-col items-center gap-1 border-r border-slate-200 bg-white py-2">
+        <img src={logoMark} alt="Mastersoft Grade Assistant" className="mb-1 size-9 rounded-lg" />
         <button
           onClick={toggleCollapsed}
           title="Expand sidebar ([)"
@@ -126,19 +148,20 @@ export function Sidebar({ onPrivacy }: { onPrivacy: () => void }) {
   }
 
   return (
-    <aside className="flex w-60 shrink-0 flex-col border-r border-slate-200 bg-white">
+    <aside className="flex w-64 shrink-0 flex-col overflow-y-auto border-r border-slate-200 bg-white">
+      <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-3 py-2">
+        <img src={logo} alt="Mastersoft Grade Assistant: grade encoding made easy" className="h-12 w-auto min-w-0 object-contain object-left" />
+        <button
+          onClick={toggleCollapsed}
+          title="Collapse sidebar ([)"
+          aria-label="Collapse sidebar"
+          className="shrink-0 rounded p-1 text-slate-400 transition-colors duration-150 hover:bg-slate-100 hover:text-brand"
+        >
+          <PanelLeftClose className="size-4" />
+        </button>
+      </div>
       <div className="space-y-2 border-b border-slate-200 p-3">
-        <div className="flex items-center justify-between">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">My classes</p>
-          <button
-            onClick={toggleCollapsed}
-            title="Collapse sidebar ([)"
-            aria-label="Collapse sidebar"
-            className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-brand"
-          >
-            <PanelLeftClose className="size-4" />
-          </button>
-        </div>
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">My classes</p>
         {listed.length > 0 && (
           <Select className="w-full" value={active?.id ?? ''} onChange={(e) => selectClass(e.target.value)} aria-label="Class">
             {listed.map((c) => (
@@ -188,10 +211,35 @@ export function Sidebar({ onPrivacy }: { onPrivacy: () => void }) {
         {item('TABLE', <Table2 className="size-4" />, 'Transmutation table')}
       </nav>
 
-      <button onClick={onPrivacy} className="flex items-center gap-2 border-t border-slate-200 px-5 py-3 text-xs text-slate-500 hover:text-brand">
-        <ShieldCheck className="size-4" /> Data Privacy Notice
-      </button>
+      <div className="space-y-0.5 border-t border-slate-200 p-2">
+        <button
+          type="button"
+          onClick={toggleHelp}
+          aria-expanded={helpOpen}
+          className="flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 transition-colors duration-150 hover:bg-slate-100 hover:text-slate-700"
+        >
+          <span>Help</span>
+          {helpOpen ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+        </button>
+        {helpOpen && (
+          <>
+            {active && (
+              <button onClick={() => setGuideOpen(true)} className={footLink}>
+                <BookOpenCheck className="size-4" /> Encoding Guide
+              </button>
+            )}
+            <button onClick={() => setShortcutsOpen(true)} className={footLink}>
+              <Keyboard className="size-4" /> Keyboard shortcuts
+            </button>
+            <button onClick={onPrivacy} className={footLink}>
+              <ShieldCheck className="size-4" /> Data Privacy Notice
+            </button>
+          </>
+        )}
+      </div>
 
+      {active && <EncodingGuideDialog record={active} term={guideTerm} open={guideOpen} onOpenChange={setGuideOpen} />}
+      <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
       <MastersoftImportDialog open={dialog === 'import'} onOpenChange={(o) => !o && setDialog(null)} />
       <ClassDialog open={dialog === 'new' || dialog === 'edit'} onOpenChange={(o) => !o && setDialog(null)} record={dialog === 'edit' ? (active ?? undefined) : undefined} />
     </aside>

@@ -1,5 +1,5 @@
-import { AlertTriangle, BookOpenCheck, Check, Copy, CopyPlus, Crosshair, FileDown, FileSpreadsheet, FileUp, Keyboard, Plus, Redo2, SlidersHorizontal, Undo2, UserPlus } from 'lucide-react';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { AlertTriangle, BookOpenCheck, Check, Copy, CopyPlus, Crosshair, FileDown, FileSpreadsheet, FileUp, Keyboard, MoreHorizontal, PanelRight, Plus, Redo2, SlidersHorizontal, Undo2, UserPlus } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { assessmentTotals, categoryIssues, csColumns, weColumns } from '../app/gradebook';
 import { SUBJECT_TYPES, subjectTypeLabel, TERM_LABEL, termWeightLabel } from '../app/labels';
 import { columnTags } from '../app/obe';
@@ -16,7 +16,21 @@ import { ShortcutsDialog } from './ShortcutsDialog';
 import { Button } from './ui/button';
 import { Dialog, DialogContent } from './ui/dialog';
 import { Select } from './ui/input';
+import { cn } from '../lib/utils';
+import { SaveIndicator } from './SaveStatus';
+import { TeacherAssistantPanel } from './TeacherAssistantPanel';
 import { WorkflowGuide } from './WorkflowGuide';
+
+const PANEL_KEY = 'assistantPanel';
+/** The assistant opens beside the grid on wide screens (unless hidden before); on smaller ones it is opened on demand and floats over it. */
+const initialPanel = () => {
+  try {
+    if (localStorage.getItem(PANEL_KEY) === '0') return false;
+  } catch {
+    // No stored choice.
+  }
+  return window.matchMedia('(min-width: 1280px)').matches;
+};
 
 export function TermGradebook({ record, term }: { record: ClassRecord; term: Term }) {
   const { updateClassInfo, setCsMode, addStudent, setView, undo, redo, copyTermSetup, unarchiveClass } = useStore();
@@ -31,6 +45,15 @@ export function TermGradebook({ record, term }: { record: ClassRecord; term: Ter
   const [guideOpen, setGuideOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [replaceFrom, setReplaceFrom] = useState<Term | null>(null);
+  const [panelOpen, setPanelOpen] = useState(initialPanel);
+  const setPanel = (open: boolean) => {
+    setPanelOpen(open);
+    try {
+      localStorage.setItem(PANEL_KEY, open ? '1' : '0');
+    } catch {
+      // Not saved; the panel just opens by default next time.
+    }
+  };
   const weighted = setup.csMode === 'WEIGHTED_CATEGORIES';
   const progress = useMemo(() => termProgress(record, term), [record, term]);
   const totals = assessmentTotals(setup);
@@ -102,141 +125,113 @@ export function TermGradebook({ record, term }: { record: ClassRecord; term: Ter
   }, []);
 
   return (
-    <>
-      {record.archived && (
-        <div role="status" className="flex flex-wrap items-center gap-3 border-b border-amber-200 bg-amber-50 px-4 py-1.5 text-sm text-amber-900">
-          <span>📦 This class is archived.</span>
-          <Button size="sm" variant="outline" className="h-7 border-amber-300 bg-white px-2 text-xs text-amber-900 hover:bg-amber-100" onClick={() => unarchiveClass(record.id)}>
-            Unarchive class
-          </Button>
-        </div>
-      )}
-      <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-4 py-2.5">
-        <h2 className="mr-1 text-base font-semibold">
-          {TERM_LABEL[term]} Gradebook <span className="text-sm font-normal text-slate-400">({termWeightLabel(term)} of FR)</span>
-        </h2>
-        <Select
-          aria-label="Subject type"
-          title="Subject type: sets the CS / WE weightage"
-          value={record.subjectType}
-          onChange={(e) => updateClassInfo({ ...record, subjectType: e.target.value as SubjectType })}
-          className="h-8 rounded-full bg-slate-50 text-xs font-medium"
-        >
-          {SUBJECT_TYPES.map((t) => (
-            <option key={t} value={t}>
-              {subjectTypeLabel(t)}
-            </option>
-          ))}
-        </Select>
-        <Select
-          aria-label="Class Standing mode"
-          title="How Class Standing columns are combined"
-          value={setup.csMode}
-          onChange={(e) => setCsMode(term, e.target.value as CsMode)}
-          className="h-8 rounded-full bg-slate-50 text-xs font-medium"
-        >
-          <option value="RAW_SUM">CS: Raw sum (Mastersoft default)</option>
-          <option value="WEIGHTED_CATEGORIES">CS: Weighted categories</option>
-        </Select>
-        {weighted && (
-          <Button size="sm" variant="outline" onClick={() => setCategoriesOpen(true)}>
-            <SlidersHorizontal /> Categories ({setup.categories.length})
-          </Button>
+    <div className="flex min-h-0 flex-1">
+      <div className="flex min-w-0 flex-1 flex-col">
+        {record.archived && (
+          <div role="status" className="flex flex-wrap items-center gap-3 border-b border-amber-200 bg-amber-50 px-4 py-1.5 text-sm text-amber-900">
+            <span>📦 This class is archived.</span>
+            <Button size="sm" variant="outline" className="h-7 border-amber-300 bg-white px-2 text-xs text-amber-900 hover:bg-amber-100" onClick={() => unarchiveClass(record.id)}>
+              Unarchive class
+            </Button>
+          </div>
         )}
-        <div className="ml-auto flex flex-wrap gap-2">
-          {copySources.length > 0 && (
-            <Select
-              aria-label="Copy setup from another term"
-              title="Copy the columns, categories and Class Standing mode of another term. Scores are not copied."
-              value=""
-              onChange={(e) => e.target.value && copyFrom(e.target.value as Term)}
-              className="h-8 w-auto text-xs"
-            >
-              <option value="">Copy setup…</option>
-              {copySources.map((t) => (
-                <option key={t} value={t}>
-                  From {TERM_LABEL[t]}
-                </option>
-              ))}
-            </Select>
-          )}
-          <Button
-            size="icon"
-            variant="outline"
-            onClick={undo}
-            disabled={!history.undo}
-            aria-label="Undo"
-            title={history.undo ? `Undo: ${history.undo} (Ctrl+Z)` : 'Nothing to undo'}
-          >
-            <Undo2 />
-          </Button>
-          <Button
-            size="icon"
-            variant="outline"
-            onClick={redo}
-            disabled={!history.redo}
-            aria-label="Redo"
-            title={history.redo ? `Redo: ${history.redo} (Ctrl+Y)` : 'Nothing to redo'}
-          >
-            <Redo2 />
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => setImportOpen(true)}>
-            <FileUp /> Import Excel
-          </Button>
-          <Button size="sm" onClick={() => addColumn()}>
-            <Plus /> Add column
-          </Button>
+
+        <SummaryCards record={record} term={term} onSubjectType={(t) => updateClassInfo({ ...record, subjectType: t })} onCsMode={(m) => setCsMode(term, m)} onCategories={() => setCategoriesOpen(true)} onAddColumn={addColumn} />
+
+        <WorkflowGuide
+          progress={progress}
+          totals={totals}
+          actions={{
+            students: [
+              { label: 'Mastersoft list', icon: <FileSpreadsheet />, onClick: () => setMastersoftOpen(true) },
+              { label: 'Excel', icon: <FileUp />, onClick: () => setImportOpen(true) },
+              { label: 'Type in', icon: <UserPlus />, onClick: addStudentAndFocus },
+            ],
+            columns: [
+              ...(setup.columns.length === 0
+                ? copySources.map((t) => ({ label: `Copy from ${TERM_LABEL[t]}`, icon: <CopyPlus />, onClick: () => copyFrom(t) }))
+                : []),
+              { label: 'Add CS column', icon: <Plus />, onClick: () => addColumn('CS') },
+              { label: 'Add WE column', icon: <Plus />, onClick: () => addColumn('WE') },
+              ...(weighted ? [{ label: 'Categories', icon: <SlidersHorizontal />, onClick: () => setCategoriesOpen(true) }] : []),
+            ],
+            scores: [
+              { label: 'Go to next blank', icon: <Crosshair />, onClick: goToNextProblem },
+              { label: 'Import Excel', icon: <FileUp />, onClick: () => setImportOpen(true) },
+            ],
+            encode: [
+              { label: 'Export for Mastersoft', icon: <FileDown />, onClick: () => setExportOpen(true) },
+              { label: 'Encoding guide', icon: <BookOpenCheck />, onClick: () => setGuideOpen(true) },
+            ],
+          }}
+        />
+
+        <div className="flex flex-wrap items-center gap-2 px-4 pt-3">
+          <div role="tablist" aria-label="Term" className="inline-flex rounded-full border border-slate-200 bg-white p-0.5 shadow-sm">
+            {TERMS.map((t) => (
+              <button
+                key={t}
+                role="tab"
+                aria-selected={t === term}
+                onClick={() => t !== term && setView(t)}
+                className={cn(
+                  'rounded-full px-4 py-1.5 text-sm font-medium transition-colors duration-150',
+                  t === term ? 'bg-brand text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100',
+                )}
+              >
+                {TERM_LABEL[t]} <span className={cn('text-xs font-normal', t === term ? 'text-white/80' : 'text-slate-400')}>({termWeightLabel(t)})</span>
+              </button>
+            ))}
+          </div>
+          <SaveIndicator />
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => setGuideOpen(true)}>
+              <BookOpenCheck /> Encoding Guide
+            </Button>
+            <Button size="icon" variant="outline" onClick={undo} disabled={!history.undo} aria-label="Undo" title={history.undo ? `Undo: ${history.undo} (Ctrl+Z)` : 'Nothing to undo'}>
+              <Undo2 />
+            </Button>
+            <Button size="icon" variant="outline" onClick={redo} disabled={!history.redo} aria-label="Redo" title={history.redo ? `Redo: ${history.redo} (Ctrl+Y)` : 'Nothing to redo'}>
+              <Redo2 />
+            </Button>
+            <Button size="sm" variant="outline" onClick={addStudentAndFocus}>
+              <UserPlus /> Add student
+            </Button>
+            <Button size="sm" onClick={() => addColumn()}>
+              <Plus /> Add column
+            </Button>
+            <MoreActions
+              onImportExcel={() => setImportOpen(true)}
+              copySources={copySources}
+              onCopyFrom={copyFrom}
+              onShortcuts={() => setShortcutsOpen(true)}
+              onExport={() => setExportOpen(true)}
+            />
+            {!panelOpen && (
+              <Button size="sm" variant="outline" onClick={() => setPanel(true)} title="Show the teacher assistant">
+                <PanelRight /> Assistant
+              </Button>
+            )}
+          </div>
+        </div>
+
+        <div className="mx-4 mb-3 mt-3 flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <GradebookGrid
+            record={record}
+            term={term}
+            onEditColumn={setColumnDialog}
+            onAddColumn={addColumn}
+            onAddStudent={addStudentAndFocus}
+            onImportMastersoft={() => setMastersoftOpen(true)}
+            onImportExcel={() => setImportOpen(true)}
+          />
+          <StatusBar progress={progress} record={record} term={term} targets={targets} onJump={jump} onSummary={() => setView('SUMMARY')} onShortcuts={() => setShortcutsOpen(true)} />
         </div>
       </div>
 
-      <WorkflowGuide
-        progress={progress}
-        totals={totals}
-        actions={{
-          students: [
-            { label: 'Mastersoft list', icon: <FileSpreadsheet />, onClick: () => setMastersoftOpen(true) },
-            { label: 'Excel', icon: <FileUp />, onClick: () => setImportOpen(true) },
-            { label: 'Type in', icon: <UserPlus />, onClick: addStudentAndFocus },
-          ],
-          columns: [
-            ...(setup.columns.length === 0
-              ? copySources.map((t) => ({ label: `Copy from ${TERM_LABEL[t]}`, icon: <CopyPlus />, onClick: () => copyFrom(t) }))
-              : []),
-            { label: 'Add CS column', icon: <Plus />, onClick: () => addColumn('CS') },
-            { label: 'Add WE column', icon: <Plus />, onClick: () => addColumn('WE') },
-            ...(weighted ? [{ label: 'Categories', icon: <SlidersHorizontal />, onClick: () => setCategoriesOpen(true) }] : []),
-          ],
-          scores: [
-            { label: 'Go to next blank', icon: <Crosshair />, onClick: goToNextProblem },
-            { label: 'Import Excel', icon: <FileUp />, onClick: () => setImportOpen(true) },
-          ],
-          encode: [
-            { label: 'Export for Mastersoft', icon: <FileDown />, onClick: () => setExportOpen(true) },
-            { label: 'Encoding guide', icon: <BookOpenCheck />, onClick: () => setGuideOpen(true) },
-          ],
-        }}
-      />
-
-      <AssessmentBanner record={record} term={term} onAddColumn={addColumn}>
-        <Button size="sm" variant="outline" onClick={() => setGuideOpen(true)}>
-          <BookOpenCheck /> Encoding guide
-        </Button>
-        <Button size="sm" variant={progress.complete ? 'default' : 'outline'} onClick={() => setExportOpen(true)}>
-          <FileDown /> Export for Mastersoft
-        </Button>
-      </AssessmentBanner>
-
-      <GradebookGrid
-        record={record}
-        term={term}
-        onEditColumn={setColumnDialog}
-        onAddColumn={addColumn}
-        onAddStudent={addStudentAndFocus}
-        onImportMastersoft={() => setMastersoftOpen(true)}
-        onImportExcel={() => setImportOpen(true)}
-      />
-
-      <StatusBar progress={progress} record={record} term={term} targets={targets} onJump={jump} onSummary={() => setView('SUMMARY')} onShortcuts={() => setShortcutsOpen(true)} />
+      {panelOpen && (
+        <TeacherAssistantPanel progress={progress} totals={totals} onNextProblem={goToNextProblem} onExport={() => setExportOpen(true)} onSummary={() => setView('SUMMARY')} onClose={() => setPanel(false)} />
+      )}
 
       <ColumnDialog
         term={term}
@@ -273,7 +268,7 @@ export function TermGradebook({ record, term }: { record: ClassRecord; term: Ter
       </Dialog>
       <CategoriesDialog term={term} setup={setup} open={categoriesOpen} onOpenChange={setCategoriesOpen} />
       <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
-    </>
+    </div>
   );
 }
 
@@ -362,45 +357,194 @@ function StatusBar({ progress: p, record, term, targets, onJump, onSummary, onSh
   );
 }
 
-/** Mirrors Mastersoft's Assessment Component screen: the Total Marks to encode. */
-function AssessmentBanner({ record, term, onAddColumn, children }: { record: ClassRecord; term: Term; onAddColumn: (component: Component) => void; children?: ReactNode }) {
+const card = 'rounded-xl border border-slate-200 bg-white px-4 py-2.5 shadow-sm';
+
+/** Compact cards above the grid: the class, Mastersoft's Total Marks for this term, and the Final Rating weights. */
+function SummaryCards({
+  record,
+  term,
+  onSubjectType,
+  onCsMode,
+  onCategories,
+  onAddColumn,
+}: {
+  record: ClassRecord;
+  term: Term;
+  onSubjectType: (t: SubjectType) => void;
+  onCsMode: (m: CsMode) => void;
+  onCategories: () => void;
+  onAddColumn: (component: Component) => void;
+}) {
   const setup = record.terms[term];
   const totals = assessmentTotals(setup);
-  // Missing columns are already shown by the step strip and the empty Total Marks cards; only category errors need a warning here.
+  // Missing columns are shown by the steps and the empty Total Marks; only category errors need a warning here.
   const issues = categoryIssues(setup);
   /** Union of the CO codes on a component's columns, for Mastersoft's TAG CO button. */
   const tagCo = (columns: Column[]) => {
     const tagged = new Set(columns.flatMap((c) => columnTags(record.obe, c).cos));
     return (record.obe?.cos ?? []).map((c) => c.code).filter((code) => tagged.has(code));
   };
+  const select = 'h-8 rounded-full bg-slate-50 text-xs font-medium';
   return (
-    <div className="border-b border-slate-200 bg-surface px-4 py-3">
-      <div className="flex flex-wrap items-stretch gap-3">
-        <div className="flex items-center text-[11px] font-semibold uppercase leading-tight tracking-wide text-slate-500">
-          Mastersoft
-          <br />
-          Assessment Component
+    <div className="flex flex-wrap items-stretch gap-3 px-4 pt-3">
+      <section aria-label="Class" className={cn(card, 'flex min-w-64 flex-col justify-center gap-1.5')}>
+        <div className="truncate text-sm font-semibold text-slate-900">
+          {record.subjectCode || 'Untitled'}
+          {record.subjectName && ` – ${record.subjectName}`}
+          {record.section && <span className="font-normal text-slate-500"> · {record.section}</span>}
         </div>
-        <TotalCard
-          label={`${TERM_LABEL[term]} – Class Standing`}
-          value={totals.cs}
-          note={setup.csMode === 'WEIGHTED_CATEGORIES' ? 'Weighted categories: always 100' : undefined}
-          tagCo={tagCo(csColumns(setup))}
-          onSetup={() => onAddColumn('CS')}
-        />
-        <TotalCard label={`${TERM_LABEL[term]} – Written Exam`} value={totals.we} tagCo={tagCo(weColumns(setup))} onSetup={() => onAddColumn('WE')} />
-        {issues.length > 0 && (
-          <div className="flex min-w-64 flex-1 items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-            <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-            <ul className="space-y-0.5">
-              {issues.map((i) => (
-                <li key={i}>{i}</li>
-              ))}
-            </ul>
+        <div className="flex flex-wrap items-center gap-2">
+          <Select aria-label="Subject type" title="Subject type: sets the CS / WE weightage" value={record.subjectType} onChange={(e) => onSubjectType(e.target.value as SubjectType)} className={select}>
+            {SUBJECT_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {subjectTypeLabel(t)}
+              </option>
+            ))}
+          </Select>
+          <Select aria-label="Class Standing mode" title="How Class Standing columns are combined" value={setup.csMode} onChange={(e) => onCsMode(e.target.value as CsMode)} className={select}>
+            <option value="RAW_SUM">CS: Raw sum (Mastersoft default)</option>
+            <option value="WEIGHTED_CATEGORIES">CS: Weighted categories</option>
+          </Select>
+          {setup.csMode === 'WEIGHTED_CATEGORIES' && (
+            <Button size="sm" variant="outline" onClick={onCategories}>
+              <SlidersHorizontal /> Categories ({setup.categories.length})
+            </Button>
+          )}
+        </div>
+      </section>
+
+      <section aria-label="Assessment component" className={cn(card, 'flex items-center gap-4')}>
+        <div className="text-[11px] font-semibold uppercase leading-tight tracking-wide text-slate-500">
+          Assessment Component
+          <div className="mt-0.5 normal-case tracking-normal text-slate-400">{TERM_LABEL[term]} · Total Marks</div>
+        </div>
+        <MarksStat label="Class Standing" value={totals.cs} note={setup.csMode === 'WEIGHTED_CATEGORIES' ? 'always 100' : undefined} tagCo={tagCo(csColumns(setup))} onSetup={() => onAddColumn('CS')} />
+        <span aria-hidden className="h-8 w-px bg-slate-200" />
+        <MarksStat label="Written Exam" value={totals.we} tagCo={tagCo(weColumns(setup))} onSetup={() => onAddColumn('WE')} />
+      </section>
+
+      <section aria-label="Final Rating weights" className={cn(card, 'flex flex-col justify-center gap-1')}>
+        <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Weights (Final Rating)</div>
+        <div className="flex items-center gap-2 text-sm">
+          {TERMS.map((t, i) => (
+            <span key={t} className="flex items-center gap-2">
+              {i > 0 && <span aria-hidden className="text-slate-300">|</span>}
+              <span className={cn(t === term ? 'font-semibold text-brand' : 'text-slate-600')}>
+                {TERM_LABEL[t]}: {termWeightLabel(t)}
+              </span>
+            </span>
+          ))}
+        </div>
+      </section>
+
+      {issues.length > 0 && (
+        <div className="flex min-w-64 flex-1 items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+          <ul className="space-y-0.5">
+            {issues.map((i) => (
+              <li key={i}>{i}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** One Total Marks value (with copy), as Mastersoft's Assessment Component screen asks for it. */
+function MarksStat({ label, value, note, tagCo = [], onSetup }: { label: string; value: number | null; note?: string; tagCo?: string[]; onSetup: () => void }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    if (value === null) return;
+    void navigator.clipboard?.writeText(String(value)).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    });
+  };
+  return (
+    <div className="flex items-center gap-2">
+      <div>
+        <div className="text-xs font-medium text-slate-600">{label}</div>
+        {note && <div className="text-[11px] text-slate-400">{note}</div>}
+        {tagCo.length > 0 && (
+          <div className="text-[11px] font-semibold text-brand" title="Course outcomes to select in Mastersoft's TAG CO">
+            TAG CO: {tagCo.join(', ')}
           </div>
         )}
-        {children && <div className="ml-auto flex items-center gap-2">{children}</div>}
       </div>
+      <div className="tabular text-xl font-semibold text-slate-900" aria-label={`${label} Total Marks`}>
+        {value === null ? (
+          <button onClick={onSetup} className="text-sm font-medium text-brand underline-offset-2 hover:underline">
+            + Add column
+          </button>
+        ) : (
+          <>
+            {value} <span className="text-xs font-normal text-slate-500">pts</span>
+          </>
+        )}
+      </div>
+      {value !== null && (
+        <Button variant="ghost" size="icon" onClick={copy} aria-label={`Copy ${label} Total Marks`} title="Copy">
+          {copied ? <Check className="text-emerald-600" /> : <Copy />}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+/** The less-used toolbar actions, kept in one menu so the workspace stays calm. */
+function MoreActions({
+  onImportExcel,
+  copySources,
+  onCopyFrom,
+  onShortcuts,
+  onExport,
+}: {
+  onImportExcel: () => void;
+  copySources: Term[];
+  onCopyFrom: (t: Term) => void;
+  onShortcuts: () => void;
+  onExport: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open]);
+  const item = 'flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs text-slate-700 transition-colors duration-150 hover:bg-slate-100';
+  const run = (fn: () => void) => () => {
+    setOpen(false);
+    fn();
+  };
+  return (
+    <div className="relative">
+      <Button size="sm" variant="outline" onClick={() => setOpen(!open)} aria-haspopup="menu" aria-expanded={open}>
+        <MoreHorizontal /> More actions
+      </Button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div role="menu" className="absolute right-0 top-full z-50 mt-1 w-64 rounded-lg border border-slate-200 bg-white p-1 shadow-lg">
+            <button role="menuitem" className={item} onClick={run(onImportExcel)}>
+              <FileUp className="size-3.5" /> Import scores from Excel
+            </button>
+            {copySources.map((t) => (
+              <button key={t} role="menuitem" className={item} onClick={run(() => onCopyFrom(t))} title="Copies the columns, categories and Class Standing mode. Scores are not copied.">
+                <CopyPlus className="size-3.5" /> Copy setup from {TERM_LABEL[t]}
+              </button>
+            ))}
+            <button role="menuitem" className={item} onClick={run(onExport)}>
+              <FileDown className="size-3.5" /> Export for Mastersoft
+            </button>
+            <div className="my-1 border-t border-slate-100" />
+            <button role="menuitem" className={item} onClick={run(onShortcuts)}>
+              <Keyboard className="size-3.5" /> Keyboard shortcuts
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

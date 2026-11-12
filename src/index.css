@@ -2,9 +2,9 @@
 @import '@fontsource-variable/inter';
 
 @theme {
-  --color-brand: #a90504;
-  --color-brand-dark: #8a0403;
-  --color-surface: #f8fafc;
+  --color-brand: #8b1e24;
+  --color-brand-dark: #6e161b;
+  --color-surface: #f6f7f9;
   --font-sans: 'Inter Variable', 'Poppins', system-ui, sans-serif;
 }
 
@@ -38,5 +38,15 @@ body {
   .print-root * {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
+  }
+}
+
+/* Motion stays light (<= 200ms); people who ask for less get none. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

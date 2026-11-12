@@ -1,5 +1,5 @@
-import { BookOpenCheck, CheckCircle2, FileDown, UserPlus } from 'lucide-react';
-import { useState } from 'react';
+import { BookOpenCheck, CheckCircle2, Check, FileDown, UserPlus } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
 import { formatPoint, reverseOutcome } from '../app/gradebook';
 import { subjectTypeLabel } from '../app/labels';
 import { useStore } from '../app/store';
@@ -14,50 +14,77 @@ import { Button } from './ui/button';
 
 const POINT_OPTIONS = [...new Set(rules.transcriptPointGrades.map((r) => r.point)), rules.transcriptFailingPoint].sort((a, b) => a - b);
 
+/** One numbered card of the three-step flow; the current step wears the brand colour, finished ones turn green. */
+function StepCard({ n, title, state, badge, badgeTone, children }: { n: number; title: string; state: 'todo' | 'now' | 'done'; badge: string; badgeTone?: 'red'; children: ReactNode }) {
+  return (
+    <li aria-current={state === 'now' ? 'step' : undefined} className={cn('rounded-xl border bg-white p-3 shadow-sm', state === 'now' ? 'border-brand/40' : 'border-slate-200')}>
+      <div className="flex items-center gap-2">
+        <span className={cn('flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold', state === 'done' ? 'bg-emerald-100 text-emerald-700' : state === 'now' ? 'bg-brand text-white' : 'bg-slate-100 text-slate-500')}>
+          {state === 'done' ? <Check className="size-3.5" aria-label="Done" /> : n}
+        </span>
+        <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
+        <Badge variant={badgeTone === 'red' ? 'red' : state === 'done' ? 'green' : 'neutral'} className="ml-auto">
+          {badge}
+        </Badge>
+      </div>
+      <div className="mt-2">{children}</div>
+    </li>
+  );
+}
+
 /** Final Rating Only mode, internally "reverse mode" (D11, D28, D38): target Final Rating → the marks to encode in all 3 terms. */
 export function ReverseMode({ record }: { record: ClassRecord }) {
   const { setReverse, setStudentField, addStudent } = useStore();
   const [guideOpen, setGuideOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const outcomes = record.students.map((s) => reverseOutcome(record, s));
+  const total = record.students.length;
+  const solved = outcomes.filter((o) => o.kind === 'ok').length;
+  const invalid = outcomes.filter((o) => o.kind === 'invalid').length;
+  const entered = solved + invalid;
   const th = 'border-b border-slate-200 bg-slate-100 px-2 py-2 text-left text-xs font-semibold text-slate-600';
   const td = 'border-b border-slate-200 px-2 py-1';
   const input = 'h-8 rounded border border-slate-300 bg-white px-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20';
 
   return (
     <>
-      <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4 py-2.5">
-        <div>
-          <h2 className="text-base font-semibold">Final Rating Only mode</h2>
-          <p className="text-xs text-slate-500">
-            For classes where only the Final Rating is encoded (internship, thesis): enter each student's Final Rating, and get the Class
-            Standing and Written Exam marks to encode in every term so Mastersoft produces it. Uses the class's {subjectTypeLabel(record.subjectType)}{' '}
-            weightage.
-          </p>
-        </div>
-        <Button size="sm" variant="outline" className="ml-auto" onClick={addStudent}>
-          <UserPlus /> Add student
-        </Button>
+      <div className="border-b border-slate-200 bg-white px-4 py-2.5">
+        <h2 className="text-base font-semibold">Final Rating Only mode</h2>
+        <p className="text-xs text-slate-500">
+          For classes where only the Final Rating is encoded (internship, thesis): enter each student's Final Rating, and get the Class
+          Standing and Written Exam marks to encode in every term so Mastersoft produces it. Uses the class's {subjectTypeLabel(record.subjectType)}{' '}
+          weightage.
+        </p>
       </div>
-      <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 bg-surface px-4 py-3">
-        <div className="text-[11px] font-semibold uppercase leading-tight tracking-wide text-slate-500">
-          Mastersoft
-          <br />
-          Assessment Component
-        </div>
-        <TotalCard label="Prelim, Midterm and Final – Class Standing" value={100} />
-        <TotalCard label="Prelim, Midterm and Final – Written Exam" value={100} />
-        <div className="ml-auto flex items-center gap-2">
-          <Button size="sm" variant="outline" onClick={() => setGuideOpen(true)}>
-            <BookOpenCheck /> Encoding guide
+
+      <ol aria-label="Final Rating Only steps" className="grid gap-3 px-4 pt-3 lg:grid-cols-3">
+        <StepCard n={1} title="Enter Target Final Rating" state={total === 0 ? 'todo' : entered === total ? 'done' : 'now'} badge={total === 0 ? 'No students' : `${entered} of ${total} entered`}>
+          <p className="text-xs text-slate-600">Type each student's target below, as a grade (60–100) or a point grade.</p>
+          <Button size="sm" variant="outline" className="mt-2" onClick={addStudent}>
+            <UserPlus /> Add student
           </Button>
-          <Button size="sm" onClick={() => setExportOpen(true)}>
-            <FileDown /> Export for Mastersoft
-          </Button>
-        </div>
-      </div>
+        </StepCard>
+        <StepCard n={2} title="Review Generated CS & WE Marks" state={solved === 0 && invalid === 0 ? 'todo' : invalid > 0 ? 'now' : solved === total ? 'done' : 'now'} badge={invalid > 0 ? `${invalid} to fix` : `${solved} generated`} badgeTone={invalid > 0 ? 'red' : undefined}>
+          <p className="text-xs text-slate-600">The marks are the same for Class Standing and Written Exam in every term. “Check (forward)” confirms Mastersoft will produce the target.</p>
+        </StepCard>
+        <StepCard n={3} title="Export / Copy to Mastersoft" state={solved > 0 && invalid === 0 && solved === total ? 'now' : 'todo'} badge="Total Marks 100 / 100">
+          <div className="flex flex-wrap items-center gap-2">
+            <TotalCard label="Class Standing" value={100} />
+            <TotalCard label="Written Exam" value={100} />
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => setGuideOpen(true)}>
+              <BookOpenCheck /> Encoding guide
+            </Button>
+            <Button size="sm" onClick={() => setExportOpen(true)}>
+              <FileDown /> Export for Mastersoft
+            </Button>
+          </div>
+        </StepCard>
+      </ol>
       <ReverseGuideDialog record={record} open={guideOpen} onOpenChange={setGuideOpen} />
       <MastersoftExportDialog record={record} term="PRELIM" reverse open={exportOpen} onOpenChange={setExportOpen} />
-      <div className="min-h-0 flex-1 overflow-auto bg-white">
+      <div className="mx-4 mb-3 mt-3 min-h-0 flex-1 overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm">
         <table className="tabular w-full border-separate border-spacing-0 text-sm">
           <thead className="sticky top-0 z-10">
             <tr>
@@ -65,9 +92,9 @@ export function ReverseMode({ record }: { record: ClassRecord }) {
               <th className={th}>Student ID</th>
               <th className={th}>Student Name</th>
               <th className={th}>Target Final Rating</th>
-              <th className={cn(th, 'bg-brand/10 text-right text-brand')}>CS Marks / 100</th>
-              <th className={cn(th, 'bg-brand/10 text-right text-brand')}>WE Marks / 100</th>
-              <th className={cn(th, 'bg-brand/10 text-brand')}>Check (forward)</th>
+              <th className={cn(th, 'bg-[#fef2f2] text-right text-brand')}>CS Marks / 100</th>
+              <th className={cn(th, 'bg-[#fef2f2] text-right text-brand')}>WE Marks / 100</th>
+              <th className={cn(th, 'bg-[#fef2f2] text-brand')}>Check (forward)</th>
             </tr>
           </thead>
           <tbody>
@@ -137,9 +164,9 @@ export function ReverseMode({ record }: { record: ClassRecord }) {
                   </td>
                   {outcome.kind === 'ok' ? (
                     <>
-                      <td className={cn(td, 'bg-[#fdf6f6] text-right text-base font-semibold')}>{outcome.solved.mark}</td>
-                      <td className={cn(td, 'bg-[#fdf6f6] text-right text-base font-semibold')}>{outcome.solved.mark}</td>
-                      <td className={cn(td, 'bg-[#fdf6f6] text-xs')}>
+                      <td className={cn(td, 'bg-[#fff7f7] text-right text-base font-semibold')}>{outcome.solved.mark}</td>
+                      <td className={cn(td, 'bg-[#fff7f7] text-right text-base font-semibold')}>{outcome.solved.mark}</td>
+                      <td className={cn(td, 'bg-[#fff7f7] text-xs')}>
                         <span className="inline-flex items-center gap-1.5">
                           Each term {outcome.check.termGrade} → FR {outcome.rating.grade} ({formatPoint(outcome.rating.point.point)})
                           {outcome.rating.grade === outcome.solved.transmuted && outcome.check.termGrade === outcome.solved.transmuted && (
@@ -151,7 +178,7 @@ export function ReverseMode({ record }: { record: ClassRecord }) {
                       </td>
                     </>
                   ) : (
-                    <td colSpan={3} className={cn(td, 'bg-[#fdf6f6] text-xs', outcome.kind === 'invalid' ? 'text-red-600' : 'text-slate-400')}>
+                    <td colSpan={3} className={cn(td, 'bg-[#fff7f7] text-xs', outcome.kind === 'invalid' ? 'text-red-600' : 'text-slate-400')}>
                       {outcome.kind === 'invalid' ? outcome.message : 'Enter a target'}
                     </td>
                   )}
