@@ -16,7 +16,7 @@ import { Input, Select } from './ui/input';
 // Pinned left columns: #, Student ID, Student Name, Status. Only the name is resizable.
 const NAME_W = 184;
 const LEFT_BASE = [40, 104, NAME_W, 76];
-const OUT_W = 88;
+const OUT_W = 104;
 const SCORE_W = 112;
 const MIN_COL_W = 64;
 /** Score columns always keep at least this much visible width next to the pinned columns. */
@@ -87,6 +87,8 @@ interface Props {
   onAddStudent: () => void;
   onImportMastersoft: () => void;
   onImportExcel: () => void;
+  /** The Setup required badge was clicked: help the teacher finish or undo the term setup. */
+  onSetupRequired: () => void;
 }
 
 type PasteNote = { kind: 'ok'; rows: number; columns: number } | { kind: 'overflow'; written: number; overflow: number };
@@ -132,7 +134,7 @@ export function focusGridCell(row: number, col: number | 'status', flash = false
   }
 }
 
-export function GradebookGrid({ record, term, onEditColumn, onAddColumn, onAddStudent, onImportMastersoft, onImportExcel }: Props) {
+export function GradebookGrid({ record, term, onEditColumn, onAddColumn, onAddStudent, onImportMastersoft, onImportExcel, onSetupRequired }: Props) {
   const { setStudentField, setScore, setStatus, deleteStudent, addStudent, pasteBlock, openDrawer, fillColumnScores, clearColumnScores } = useStore();
   const setup = record.terms[term];
   const cs = csColumns(setup);
@@ -305,8 +307,8 @@ export function GradebookGrid({ record, term, onEditColumn, onAddColumn, onAddSt
   );
 
   const outputs = [
-    { key: 'cs', head: 'CS Marks', sub: totals.cs !== null ? `/ ${totals.cs}` : '' },
-    { key: 'we', head: 'WE Marks', sub: totals.we !== null ? `/ ${totals.we}` : '' },
+    { key: 'cs', head: 'Class Standing Marks', sub: totals.cs !== null ? `/ ${totals.cs}` : '' },
+    { key: 'we', head: 'Written Exam Marks', sub: totals.we !== null ? `/ ${totals.we}` : '' },
     ...(weighted ? [{ key: 'rawsum', head: 'Raw-sum TG', sub: 'comparison' }] : []),
     { key: 'tg', head: 'Term Grade', sub: '' },
     { key: 'pg', head: 'Point Grade', sub: '' },
@@ -336,9 +338,9 @@ export function GradebookGrid({ record, term, onEditColumn, onAddColumn, onAddSt
   const weSpan = weFolded ? 1 : Math.max(we.length, 1);
   const columnCount = 4 + csSpan + weSpan + 1 + outputs.length;
   const addPlaceholder = (component: Component) => (
-    <th className={cn(th, 'min-w-32 p-1 font-normal', component === 'CS' ? 'bg-sky-50' : 'bg-violet-50')}>
+    <th className={cn(th, 'min-w-48 p-1 font-normal', component === 'CS' ? 'bg-sky-50' : 'bg-violet-50')}>
       <Button size="sm" variant="ghost" className="h-7 w-full px-2 text-xs text-slate-600" onClick={() => onAddColumn(component)}>
-        <Plus /> Add {component} column
+        <Plus /> Add {component === 'CS' ? 'Class Standing' : 'Written Exam'} column
       </Button>
     </th>
   );
@@ -429,7 +431,7 @@ export function GradebookGrid({ record, term, onEditColumn, onAddColumn, onAddSt
           </tr>
           <tr>
             {cs.length === 0 && addPlaceholder('CS')}
-            {csFolded && <SummaryHead label="CS Total" total={totals.cs} className="bg-sky-50" />}
+            {csFolded && <SummaryHead label="Class Standing Total" total={totals.cs} className="bg-sky-50" />}
             {scoreColumns.filter((c) => !isFolded(c)).map((c) => {
               const category = weighted && c.component === 'CS' ? setup.categories.find((cat) => cat.id === c.categoryId) : undefined;
               const sortedDir = activeScoreSort?.columnId === c.id ? activeScoreSort.dir : undefined;
@@ -467,7 +469,7 @@ export function GradebookGrid({ record, term, onEditColumn, onAddColumn, onAddSt
                 </th>
               );
             })}
-            {weFolded && <SummaryHead label="WE Total" total={totals.we} className="bg-violet-50" />}
+            {weFolded && <SummaryHead label="Written Exam Total" total={totals.we} className="bg-violet-50" />}
             {we.length === 0 && addPlaceholder('WE')}
           </tr>
         </thead>
@@ -564,14 +566,21 @@ export function GradebookGrid({ record, term, onEditColumn, onAddColumn, onAddSt
                   <td key={o.key} style={outStyle(o.key)} className={cn(td, outBg, i === 0 && 'border-l-2 border-l-brand/50')}>
                     <button
                       onClick={() => {
+                        if (outcome.kind === 'setup') return onSetupRequired();
                         const col = outcome.kind === 'incomplete' || outcome.kind === 'invalid' ? firstProblemCol(student) : undefined;
                         if (col !== undefined) focusCell(row, col);
                         else openDrawer({ studentId: student.id, term });
                       }}
                       className="flex h-10 w-full items-center justify-end gap-1 px-2 text-right transition-colors duration-150 hover:bg-brand/10"
-                      title={outcome.kind === 'incomplete' || outcome.kind === 'invalid' ? 'Go to the score that needs attention' : 'Show the step-by-step breakdown'}
+                      title={
+                        outcome.kind === 'setup'
+                          ? 'Finish the term setup'
+                          : outcome.kind === 'incomplete' || outcome.kind === 'invalid'
+                            ? 'Go to the score that needs attention'
+                            : 'Show the step-by-step breakdown'
+                      }
                     >
-                      <OutputCell outcome={outcome} column={o.key} first={i === 0} />
+                      <OutputCell outcome={outcome} column={o.key} first={i === 0} weighted={weighted} />
                     </button>
                   </td>
                 ))}
@@ -951,12 +960,22 @@ const Unverified = ({ title, children = '!' }: { title: string; children?: React
 );
 
 /** `first` is the first output column, which carries the row's message. */
-function OutputCell({ outcome, column, first }: { outcome: TermOutcome; column: string; first: boolean }) {
+function OutputCell({ outcome, column, first, weighted }: { outcome: TermOutcome; column: string; first: boolean; weighted: boolean }) {
   switch (outcome.kind) {
     case 'status':
       return <span className={cn('text-xs font-semibold text-brand', outcome.carried && 'italic')}>{outcome.status}</span>;
     case 'setup':
-      return <span className="text-slate-300">—</span>;
+      return first ? (
+        <Badge
+          variant="amber"
+          className="whitespace-nowrap"
+          title={weighted ? 'Add categories and assign columns, or switch back to Raw sum.' : 'Add at least one Class Standing and one Written Exam column.'}
+        >
+          Setup required
+        </Badge>
+      ) : (
+        <span className="text-slate-300">—</span>
+      );
     case 'incomplete':
       return first ? (
         <span className="whitespace-nowrap text-xs font-medium text-amber-700" title="Click to go to the blank score">

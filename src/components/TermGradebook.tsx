@@ -1,6 +1,6 @@
 import { AlertTriangle, BookOpenCheck, Check, Copy, CopyPlus, Crosshair, FileDown, FileSpreadsheet, FileUp, Keyboard, MoreHorizontal, PanelRight, Plus, Redo2, SlidersHorizontal, Undo2, UserPlus } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { assessmentTotals, categoryIssues, csColumns, weColumns } from '../app/gradebook';
+import { assessmentTotals, categoryIssues, csColumns, missingColumnIssues, weColumns } from '../app/gradebook';
 import { SUBJECT_TYPES, subjectTypeLabel, TERM_LABEL, termWeightLabel } from '../app/labels';
 import { columnTags } from '../app/obe';
 import { nextProblem, termProgress, type TermProgress } from '../app/progress';
@@ -45,6 +45,7 @@ export function TermGradebook({ record, term }: { record: ClassRecord; term: Ter
   const [guideOpen, setGuideOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [replaceFrom, setReplaceFrom] = useState<Term | null>(null);
+  const [setupHelpOpen, setSetupHelpOpen] = useState(false);
   const [panelOpen, setPanelOpen] = useState(initialPanel);
   const setPanel = (open: boolean) => {
     setPanelOpen(open);
@@ -151,8 +152,8 @@ export function TermGradebook({ record, term }: { record: ClassRecord; term: Ter
               ...(setup.columns.length === 0
                 ? copySources.map((t) => ({ label: `Copy from ${TERM_LABEL[t]}`, icon: <CopyPlus />, onClick: () => copyFrom(t) }))
                 : []),
-              { label: 'Add CS column', icon: <Plus />, onClick: () => addColumn('CS') },
-              { label: 'Add WE column', icon: <Plus />, onClick: () => addColumn('WE') },
+              { label: 'Add Class Standing column', icon: <Plus />, onClick: () => addColumn('CS') },
+              { label: 'Add Written Exam column', icon: <Plus />, onClick: () => addColumn('WE') },
               ...(weighted ? [{ label: 'Categories', icon: <SlidersHorizontal />, onClick: () => setCategoriesOpen(true) }] : []),
             ],
             scores: [
@@ -224,6 +225,7 @@ export function TermGradebook({ record, term }: { record: ClassRecord; term: Ter
             onAddStudent={addStudentAndFocus}
             onImportMastersoft={() => setMastersoftOpen(true)}
             onImportExcel={() => setImportOpen(true)}
+            onSetupRequired={() => setSetupHelpOpen(true)}
           />
           <StatusBar progress={progress} record={record} term={term} targets={targets} onJump={jump} onSummary={() => setView('SUMMARY')} onShortcuts={() => setShortcutsOpen(true)} />
         </div>
@@ -263,6 +265,54 @@ export function TermGradebook({ record, term }: { record: ClassRecord; term: Ter
             >
               Replace setup
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={setupHelpOpen} onOpenChange={setSetupHelpOpen}>
+        <DialogContent
+          title="Setup required"
+          description={weighted ? 'Add categories and assign columns, or switch back to Raw sum.' : 'This term needs at least one Class Standing column and one Written Exam column.'}
+        >
+          {(weighted ? categoryIssues(setup) : missingColumnIssues(setup)).length > 0 && (
+            <ul className="mb-3 list-disc space-y-0.5 pl-5 text-sm text-slate-600">
+              {(weighted ? categoryIssues(setup) : missingColumnIssues(setup)).map((i) => (
+                <li key={i}>{i}</li>
+              ))}
+            </ul>
+          )}
+          <div className="flex flex-wrap justify-end gap-2">
+            {weighted ? (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setSetupHelpOpen(false);
+                    setCategoriesOpen(true);
+                  }}
+                >
+                  <SlidersHorizontal /> Open categories
+                </Button>
+                <Button
+                  onClick={() => {
+                    setCsMode(term, 'RAW_SUM');
+                    setSetupHelpOpen(false);
+                  }}
+                >
+                  Switch to Raw sum
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  onClick={() => {
+                    setSetupHelpOpen(false);
+                    addColumn(csColumns(setup).length === 0 ? 'CS' : 'WE');
+                  }}
+                >
+                  <Plus /> Add a column
+                </Button>
+              </>
+            )}
           </div>
         </DialogContent>
       </Dialog>
@@ -394,16 +444,22 @@ function SummaryCards({
           {record.section && <span className="font-normal text-slate-500"> · {record.section}</span>}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Select aria-label="Subject type" title="Subject type: sets the CS / WE weightage" value={record.subjectType} onChange={(e) => onSubjectType(e.target.value as SubjectType)} className={select}>
+          <Select aria-label="Subject type" title="Subject type: sets the Class Standing / Written Exam weightage" value={record.subjectType} onChange={(e) => onSubjectType(e.target.value as SubjectType)} className={select}>
             {SUBJECT_TYPES.map((t) => (
               <option key={t} value={t}>
                 {subjectTypeLabel(t)}
               </option>
             ))}
           </Select>
-          <Select aria-label="Class Standing mode" title="How Class Standing columns are combined" value={setup.csMode} onChange={(e) => onCsMode(e.target.value as CsMode)} className={select}>
-            <option value="RAW_SUM">CS: Raw sum (Mastersoft default)</option>
-            <option value="WEIGHTED_CATEGORIES">CS: Weighted categories</option>
+          <Select
+            aria-label="Class Standing setup"
+            title="How Class Standing columns are combined"
+            value={setup.csMode}
+            onChange={(e) => onCsMode(e.target.value as CsMode)}
+            className={select}
+          >
+            <option value="RAW_SUM">Raw sum (Mastersoft default)</option>
+            <option value="WEIGHTED_CATEGORIES">Weighted categories</option>
           </Select>
           {setup.csMode === 'WEIGHTED_CATEGORIES' && (
             <Button size="sm" variant="outline" onClick={onCategories}>

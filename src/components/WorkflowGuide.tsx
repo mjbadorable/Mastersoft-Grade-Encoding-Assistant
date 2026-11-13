@@ -94,7 +94,7 @@ export function WorkflowGuide({ progress: p, totals, actions }: Props) {
       title: 'Review & export',
       short: 'Review & export',
       done: false,
-      detail: p.complete ? `Set Total Marks to CS ${totals.cs} and WE ${totals.we}, then upload or copy the marks.` : 'Ready once every student has a grade or a status.',
+      detail: p.complete ? `Set Total Marks to Class Standing ${totals.cs} and Written Exam ${totals.we}, then upload or copy the marks.` : 'Ready once every student has a grade or a status.',
       actions: actions.encode,
     },
   ];

@@ -1,15 +1,17 @@
-import { useMemo } from 'react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { finalOutcome, formatPoint, termOutcome } from '../app/gradebook';
 import { STATUS_NAME, subjectTypeLabel, TERM_LABEL } from '../app/labels';
 import { obeReport } from '../app/obe';
 import { useStore } from '../app/store';
 import type { ClassRecord } from '../app/types';
-import type { ComponentResult, OutcomeAttainment, Term } from '../engine';
+import { BP, rules, type ComponentResult, type OutcomeAttainment, type Term, type TermResult } from '../engine';
+import { cn } from '../lib/utils';
 import { FinalCell } from './FinalRatingSummary';
 import { Badge } from './ui/badge';
 import { Dialog, DialogContent } from './ui/dialog';
 
-/** Step-by-step breakdown for one student and term, from the engine's `trace`. */
+/** Step-by-step breakdown for one student and term, explained in plain words from the engine's result. */
 export function BreakdownDrawer({ record }: { record: ClassRecord }) {
   const { drawer, openDrawer } = useStore();
   const student = drawer && record.students.find((s) => s.id === drawer.studentId);
@@ -74,7 +76,7 @@ function Breakdown({ record, studentId, term }: { record: ClassRecord; studentId
 
           {outcome.categories && (
             <section>
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Weighted categories → CS mark</h3>
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Weighted categories → Class Standing mark</h3>
               <table className="tabular w-full text-sm">
                 <tbody>
                   {outcome.categories.map((c) => (
@@ -89,49 +91,14 @@ function Breakdown({ record, studentId, term }: { record: ClassRecord; studentId
                 </tbody>
               </table>
               <p className="mt-1 text-xs text-slate-500">
-                CS mark = weighted CS % rounded half-up = <strong>{result.cs.raw} / 100</strong>. The plain raw sum would give a term grade of{' '}
+                Class Standing mark = weighted Class Standing % rounded half-up = <strong>{result.cs.raw} / 100</strong>. The plain raw sum would give a term grade of{' '}
                 <strong>{outcome.rawSumResult?.termGrade}</strong>.
               </p>
             </section>
           )}
 
-          <section>
-            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Step by step</h3>
-            <ol className="space-y-1.5">
-              {result.trace.map((line) => (
-                <li key={line} className="tabular rounded bg-slate-50 px-3 py-2 font-mono text-[13px] text-slate-800">
-                  {line}
-                </li>
-              ))}
-            </ol>
-            <table className="tabular mt-3 w-full text-sm">
-              <thead>
-                <tr className="text-xs text-slate-500">
-                  <th className="py-1 text-left font-medium" />
-                  <th className="py-1 text-right font-medium">Scaled %</th>
-                  <th className="py-1 text-right font-medium">Rounded</th>
-                  <th className="py-1 text-right font-medium">Transmuted</th>
-                  <th className="py-1 text-right font-medium">Weighted</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(
-                  [
-                    ['CS', result.cs],
-                    ['WE', result.we],
-                  ] as const
-                ).map(([label, c]) => (
-                  <tr key={label} className="border-t border-slate-100">
-                    <td className="py-1 font-medium">{label}</td>
-                    <td className="py-1 text-right">{(c.scaledHundredths / 100).toFixed(2)}</td>
-                    <td className="py-1 text-right">{c.roundedPct}</td>
-                    <td className="py-1 text-right">{c.transmuted}</td>
-                    <td className="py-1 text-right">{c.weighted.toFixed(2)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
+          <StepCards result={result} />
+
 
           <section className="flex items-center gap-6 rounded-md border border-brand/20 bg-brand/5 px-4 py-3">
             <div>
@@ -161,6 +128,110 @@ function Breakdown({ record, studentId, term }: { record: ClassRecord; studentId
       </section>
       <ObeSection record={record} studentId={studentId} term={term} />
     </div>
+  );
+}
+
+/** A weight in basis points as a plain percent: 5000 → "50", 3333 → "33.33". */
+const pctOf = (bp: number) => String(Number(((bp / BP) * 100).toFixed(2)));
+
+/** One line of a step card: a small grey label, then the sentence. */
+function Line({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <p className="text-sm leading-relaxed text-slate-800">
+      <span className="font-medium text-slate-500">{label}:</span> {children}
+    </p>
+  );
+}
+
+/** Class Standing or Written Exam: the score, its table value, and the points it adds to the term grade. */
+function ComponentCard({ title, weightPct, c, tone }: { title: string; weightPct: string; c: ComponentResult; tone: 'sky' | 'violet' }) {
+  return (
+    <section className={cn('space-y-1.5 rounded-xl border p-3', tone === 'sky' ? 'border-sky-200 bg-sky-50/60' : 'border-violet-200 bg-violet-50/60')}>
+      <h4 className={cn('text-sm font-semibold', tone === 'sky' ? 'text-sky-900' : 'text-violet-900')}>
+        {title} <span className="font-normal">({weightPct}% of Term Grade)</span>
+      </h4>
+      <Line label="Score">
+        Earned{' '}
+        <strong>
+          {c.raw} out of {c.total}
+        </strong>{' '}
+        (<strong>{(c.scaledHundredths / 100).toFixed(2)}%</strong>, rounded to <strong>{c.roundedPct}%</strong>).
+      </Line>
+      <Line label="Transmutation table">
+        In Mastersoft's table, <strong>{c.roundedPct}%</strong> converts to <strong>{c.transmuted}</strong>.
+      </Line>
+      <Line label="Points earned">
+        <strong>{weightPct}%</strong> of <strong>{c.transmuted}</strong> = <strong>{c.weighted.toFixed(2)} points</strong>.
+      </Line>
+    </section>
+  );
+}
+
+/** The term grade in three plain steps, plus the raw numbers behind a toggle for coordinators. */
+function StepCards({ result }: { result: TermResult }) {
+  const [showNumbers, setShowNumbers] = useState(false);
+  const w = rules.weightBp[result.subjectType];
+  const csPct = pctOf(w.cs);
+  const wePct = pctOf(w.we);
+  const sum = (result.cs.weighted + result.we.weighted).toFixed(2);
+  const passed = result.termGrade >= rules.passingGrade;
+  return (
+    <section className="space-y-3">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Step by step</h3>
+      <ComponentCard title="Class Standing" weightPct={csPct} c={result.cs} tone="sky" />
+      <ComponentCard title="Written Exam" weightPct={wePct} c={result.we} tone="violet" />
+      <section className="space-y-1.5 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+        <h4 className="text-sm font-semibold text-slate-900">Combined Term Grade</h4>
+        <Line label="Add the points">
+          <strong>{result.cs.weighted.toFixed(2)}</strong> + <strong>{result.we.weighted.toFixed(2)}</strong> = <strong>{sum}</strong>
+        </Line>
+        <Line label="Round to whole grade">
+          <strong>{sum}</strong> rounds to <strong>{result.termGrade}</strong>
+        </Line>
+        <Line label="Point grade">
+          <strong>{formatPoint(result.termPointGrade.point)}</strong>{' '}
+          <span className={cn('font-medium', passed ? 'text-emerald-700' : 'text-red-600')}>({passed ? `Passed: ${rules.passingGrade} or above` : `Failed: below ${rules.passingGrade}`})</span>
+        </Line>
+      </section>
+
+      <button
+        type="button"
+        onClick={() => setShowNumbers((o) => !o)}
+        aria-expanded={showNumbers}
+        className="flex items-center gap-1 text-xs font-medium text-slate-500 transition-colors duration-150 hover:text-brand"
+      >
+        {showNumbers ? 'Hide number table' : 'Show number table'} {showNumbers ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
+      </button>
+      {showNumbers && (
+        <table className="tabular w-full text-sm">
+          <thead>
+            <tr className="text-xs text-slate-500">
+              <th className="py-1 text-left font-medium" />
+              <th className="py-1 text-right font-medium">Scaled %</th>
+              <th className="py-1 text-right font-medium">Rounded</th>
+              <th className="py-1 text-right font-medium">Transmuted</th>
+              <th className="py-1 text-right font-medium">Weighted</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(
+              [
+                ['Class Standing', result.cs],
+                ['Written Exam', result.we],
+              ] as const
+            ).map(([label, c]) => (
+              <tr key={label} className="border-t border-slate-100">
+                <td className="py-1 font-medium">{label}</td>
+                <td className="py-1 text-right">{(c.scaledHundredths / 100).toFixed(2)}</td>
+                <td className="py-1 text-right">{c.roundedPct}</td>
+                <td className="py-1 text-right">{c.transmuted}</td>
+                <td className="py-1 text-right">{c.weighted.toFixed(2)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </section>
   );
 }
 
